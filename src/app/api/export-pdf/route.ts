@@ -62,10 +62,10 @@ export async function POST(req: NextRequest) {
       jobName,
     });
 
-    return new NextResponse(pdfBuffer, {
-      status: 200,
-      headers: {
-        'Content-Type': 'application/pdf',
+    return new NextResponse(new Uint8Array(pdfBuffer), {
+    status: 200,
+    headers: {
+    'Content-Type': 'application/pdf',
         'Content-Disposition': `attachment; filename="${jobName || 'proof'}.pdf"`,
       },
     });
