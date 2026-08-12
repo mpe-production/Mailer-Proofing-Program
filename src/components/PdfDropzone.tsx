@@ -102,7 +102,7 @@ export default function PdfDropzone({ onInsertUploaded, defaultComponentType }: 
         const ctx = canvas.getContext('2d');
 
         if (ctx) {
-          await page.render({ canvasContext: ctx, viewport }).promise;
+          await page.render({ canvasContext: ctx, viewport, canvas }).promise;
           previewUrl = canvas.toDataURL('image/png');
         } else {
           throw new Error('Canvas rendering failed');
