@@ -1,20 +1,22 @@
-"use client";
+// src/components/StaircaseView.tsx
+'use client';
 
-import React, { useEffect, useRef, useState } from "react";
-import gsap from "gsap";
-import { toCanvas } from "html-to-image";
+import React, { useState, useEffect, useRef } from 'react';
+import gsap from 'gsap';
+import * as htmlToImage from 'html-to-image';
 
 export interface LoadedPdfDocument {
   id: string;
   name: string;
   frontImageUrl: string;
   backImageUrl?: string;
-  pageCount: number;
+  pageCount?: number;
   widthPt: number;
   heightPt: number;
+  componentType?: string;
 }
 
-interface StaircaseViewProps {
+export interface StaircaseViewProps {
   documents: LoadedPdfDocument[];
   onRemoveDocument?: (id: string) => void;
 }
@@ -29,26 +31,25 @@ function classifyPdfFormat(widthPt: number, heightPt: number) {
   const minDim = Math.min(widthInches, heightInches);
   const maxDim = Math.max(widthInches, heightInches);
 
-  let label = "Custom Size";
+  let label = 'Custom Size';
 
   if (minDim >= 3.2 && minDim <= 4.2 && maxDim >= 8.0 && maxDim <= 9.2) {
-    label = "Buckslip / Rack Card";
+    label = 'Buckslip / Rack Card';
   } else if (minDim >= 3.5 && minDim <= 4.5 && maxDim >= 8.5 && maxDim <= 10.0) {
-    label = "#9 / #10 Remit Envelope";
+    label = '#9 / #10 Remit Envelope';
   } else if (minDim >= 5.0 && minDim <= 6.5 && maxDim >= 8.5 && maxDim <= 10.0) {
-    label = "#6.5 Remit Panel";
+    label = '#6.5 Remit Panel';
   } else if (minDim >= 8.0 && minDim <= 9.0 && maxDim >= 10.5 && maxDim <= 12.0) {
-    label = "Letter Size";
+    label = 'Letter Size';
   } else if (minDim >= 8.0 && minDim <= 9.0 && maxDim >= 13.5 && maxDim <= 14.5) {
-    label = "Legal Size";
+    label = 'Legal Size';
   } else if (numericRatio >= 0.6 && numericRatio <= 0.7) {
-    label = "Letter Tri-Fold";
+    label = 'Letter Tri-Fold';
   } else if (numericRatio >= 0.71 && numericRatio <= 0.85) {
-    label = "Letter Bi-Fold";
+    label = 'Letter Bi-Fold';
   }
 
   return {
-    format: label.toLowerCase().replace(/[^a-z0-9]/g, "-"),
     label,
     dims: `${widthInches.toFixed(2)}" × ${heightInches.toFixed(2)}"`,
     aspectRatioStr: `Ratio ${numericRatio.toFixed(2)}`,
@@ -57,26 +58,20 @@ function classifyPdfFormat(widthPt: number, heightPt: number) {
   };
 }
 
-export const StaircaseView: React.FC<StaircaseViewProps> = ({
-  documents,
-  onRemoveDocument,
-}) => {
-  const stageRef = useRef<HTMLDivElement>(null);
-  const cardStackRef = useRef<HTMLDivElement>(null);
-
+export function StaircaseView({ documents, onRemoveDocument }: StaircaseViewProps) {
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
   const [flippedCards, setFlippedCards] = useState<Record<string, boolean>>({});
-  const [isExporting, setIsExporting] = useState(false);
+  const [isExporting, setIsExporting] = useState<boolean>(false);
 
-  useEffect(() => {
-    if (!cardStackRef.current || !stageRef.current) return;
+  const stageViewportRef = useRef<HTMLDivElement | null>(null);
+  const stackContainerRef = useRef<HTMLDivElement | null>(null);
+  const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
-    const cards = Array.from(
-      cardStackRef.current.querySelectorAll<HTMLDivElement>(".stacked-card")
-    );
-    const total = cards.length;
-    if (total === 0) return;
+  // Positioning & Auto-fit Layout Engine
+  const updateStaircasePositions = () => {
+    if (!documents.length || !stackContainerRef.current) return;
 
+    const total = documents.length;
     const cardGap = 30;
     const stepY = total > 1 ? Math.min(40, 180 / (total - 1)) : 0;
     const cos38 = Math.cos(38 * (Math.PI / 180));
@@ -85,295 +80,390 @@ export const StaircaseView: React.FC<StaircaseViewProps> = ({
     const paddingTop = 50;
 
     let currentX = paddingLeft;
-    let maxCardWidth = 0;
-    let maxCardHeight = 0;
 
-    cards.forEach((card, i) => {
-      const cardId = card.dataset.id;
-      const topStackZIndex = total - i;
-      const rawWidth = parseFloat(card.dataset.widthPx || "200");
-      const rawHeight = parseFloat(card.dataset.heightPx || "280");
+    documents.forEach((doc, i) => {
+      const cardEl = cardRefs.current.get(doc.id);
+      if (!cardEl) return;
 
-      if (rawWidth > maxCardWidth) maxCardWidth = rawWidth;
-      if (rawHeight > maxCardHeight) maxCardHeight = rawHeight;
-
+      const formatInfo = classifyPdfFormat(doc.widthPt, doc.heightPt);
+      const rawWidth = formatInfo.calculatedWidthPx;
       const projectedWidth = rawWidth * cos38;
+      const wrapper = cardEl.querySelector('.stacked-card__inner-wrapper');
+
       const posY = paddingTop + i * stepY;
-      const isFlipped = cardId ? flippedCards[cardId] : false;
-
-      card.dataset.posX = String(currentX);
-      card.dataset.posY = String(posY);
-      card.dataset.baseZIndex = String(topStackZIndex);
-
+      const topStackZIndex = total - i;
+      const isFlipped = !!flippedCards[doc.id];
       const targetZIndex = isFlipped ? 1000 : topStackZIndex;
-      const wrapper = card.querySelector<HTMLDivElement>(".stacked-card__inner-wrapper");
 
-      gsap.to(card, {
+      cardEl.dataset.posX = String(currentX);
+      cardEl.dataset.posY = String(posY);
+      cardEl.dataset.baseZIndex = String(topStackZIndex);
+
+      gsap.to(cardEl, {
         x: currentX,
         y: posY,
         zIndex: targetZIndex,
         duration: 0.4,
-        ease: "power3.out",
+        ease: 'power3.out',
       });
 
-      if (wrapper && !isFlipped) {
+      if (wrapper && !isFlipped && activeCardId !== doc.id) {
         gsap.to(wrapper, {
           rotationY: -38,
           rotationX: 12,
+          scale: 1,
           duration: 0.4,
-          ease: "power3.out",
+          ease: 'power3.out',
         });
       }
 
       currentX += projectedWidth + cardGap;
     });
 
-    const availableWidth = stageRef.current.clientWidth - 80;
-    const availableHeight = stageRef.current.clientHeight - 80;
+    // Auto-fit scale to keep all cards within stage view
+    if (stageViewportRef.current) {
+      const availableWidth = stageViewportRef.current.clientWidth - 80;
+      const availableHeight = stageViewportRef.current.clientHeight - 80;
 
-    const totalRenderWidth = currentX + maxCardWidth;
-    const totalRenderHeight = paddingTop + (total - 1) * stepY + maxCardHeight;
+      let maxCardWidth = 0;
+      let maxCardHeight = 0;
 
-    const scaleX = availableWidth / totalRenderWidth;
-    const scaleY = availableHeight / totalRenderHeight;
-    const finalScale = Math.min(Math.min(scaleX, scaleY), 1.0);
-
-    gsap.to(cardStackRef.current, {
-      scale: Math.max(finalScale, 0.25),
-      transformOrigin: "top left",
-      duration: 0.4,
-      ease: "power2.out",
-    });
-  }, [documents, flippedCards]);
-
-  const handleCardHover = (id: string, isHovering: boolean) => {
-    if (flippedCards[id]) return;
-    const cardEl = document.getElementById(`card-${id}`);
-    if (!cardEl) return;
-
-    const wrapper = cardEl.querySelector<HTMLDivElement>(".stacked-card__inner-wrapper");
-    if (isHovering) {
-      setActiveCardId(id);
-      const curY = parseFloat(cardEl.dataset.posY || "0");
-      gsap.to(cardEl, { y: curY - 20, zIndex: 500, duration: 0.3, ease: "power2.out" });
-      if (wrapper) {
-        gsap.to(wrapper, { rotationY: -15, rotationX: 4, scale: 1.04, duration: 0.3, ease: "power2.out" });
-      }
-    } else {
-      setActiveCardId(null);
-      gsap.to(cardEl, {
-        x: parseFloat(cardEl.dataset.posX || "0"),
-        y: parseFloat(cardEl.dataset.posY || "0"),
-        zIndex: parseInt(cardEl.dataset.baseZIndex || "1", 10),
-        duration: 0.3,
-        ease: "power2.out",
+      documents.forEach((doc) => {
+        const info = classifyPdfFormat(doc.widthPt, doc.heightPt);
+        if (info.calculatedWidthPx > maxCardWidth) maxCardWidth = info.calculatedWidthPx;
+        if (info.calculatedHeightPx > maxCardHeight) maxCardHeight = info.calculatedHeightPx;
       });
-      if (wrapper) {
-        gsap.to(wrapper, { rotationY: -38, rotationX: 12, scale: 1, duration: 0.3, ease: "power2.out" });
-      }
+
+      const totalRenderWidth = currentX + maxCardWidth;
+      const totalRenderHeight = paddingTop + (total - 1) * stepY + maxCardHeight;
+
+      const scaleX = availableWidth / totalRenderWidth;
+      const scaleY = availableHeight / totalRenderHeight;
+      const finalScale = Math.min(Math.min(scaleX, scaleY), 1.0);
+
+      gsap.to(stackContainerRef.current, {
+        scale: Math.max(finalScale, 0.25),
+        transformOrigin: 'top left',
+        duration: 0.4,
+        ease: 'power2.out',
+      });
     }
   };
 
-  const handleCardClick = (id: string) => {
-    const cardEl = document.getElementById(`card-${id}`);
+  useEffect(() => {
+    updateStaircasePositions();
+  }, [documents, flippedCards]);
+
+  useEffect(() => {
+    const handleResize = () => updateStaircasePositions();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [documents]);
+
+  const handleCardMouseEnter = (docId: string) => {
+    if (flippedCards[docId]) return;
+    setActiveCardId(docId);
+
+    const cardEl = cardRefs.current.get(docId);
     if (!cardEl) return;
 
-    const inner = cardEl.querySelector<HTMLDivElement>(".stacked-card__inner");
-    const wrapper = cardEl.querySelector<HTMLDivElement>(".stacked-card__inner-wrapper");
-    const isCurrentlyFlipped = !!flippedCards[id];
+    const wrapper = cardEl.querySelector('.stacked-card__inner-wrapper');
+    const curY = parseFloat(cardEl.dataset.posY || '0');
 
-    if (!isCurrentlyFlipped) {
-      setFlippedCards((prev) => ({ ...prev, [id]: true }));
+    gsap.to(cardEl, {
+      y: curY - 20,
+      zIndex: 500,
+      duration: 0.3,
+      ease: 'power2.out',
+    });
+
+    if (wrapper) {
+      gsap.to(wrapper, {
+        rotationY: -15,
+        rotationX: 4,
+        scale: 1.04,
+        duration: 0.3,
+        ease: 'power2.out',
+      });
+    }
+  };
+
+  const handleCardMouseLeave = (docId: string) => {
+    if (flippedCards[docId]) return;
+    setActiveCardId(null);
+
+    const cardEl = cardRefs.current.get(docId);
+    if (!cardEl) return;
+
+    const wrapper = cardEl.querySelector('.stacked-card__inner-wrapper');
+
+    gsap.to(cardEl, {
+      x: parseFloat(cardEl.dataset.posX || '0'),
+      y: parseFloat(cardEl.dataset.posY || '0'),
+      zIndex: parseInt(cardEl.dataset.baseZIndex || '1', 10),
+      duration: 0.3,
+      ease: 'power2.out',
+    });
+
+    if (wrapper) {
+      gsap.to(wrapper, {
+        rotationY: -38,
+        rotationX: 12,
+        scale: 1,
+        duration: 0.3,
+        ease: 'power2.out',
+      });
+    }
+  };
+
+  const handleCardClick = (docId: string) => {
+    const isFlipped = !!flippedCards[docId];
+    const cardEl = cardRefs.current.get(docId);
+    if (!cardEl) return;
+
+    const inner = cardEl.querySelector('.stacked-card__inner');
+    const wrapper = cardEl.querySelector('.stacked-card__inner-wrapper');
+
+    if (!isFlipped) {
+      setFlippedCards((prev) => ({ ...prev, [docId]: true }));
+      setActiveCardId(docId);
+
       gsap.to(cardEl, { zIndex: 1000, duration: 0.3 });
       if (wrapper) gsap.to(wrapper, { rotationY: 0, rotationX: 0, scale: 1.08, duration: 0.3 });
-      if (inner) gsap.to(inner, { rotationY: 180, duration: 0.5, ease: "back.out(1.1)" });
+      if (inner) gsap.to(inner, { rotationY: 180, duration: 0.5, ease: 'back.out(1.1)' });
     } else {
-      setFlippedCards((prev) => ({ ...prev, [id]: false }));
-      if (inner) gsap.to(inner, { rotationY: 0, duration: 0.5, ease: "back.out(1.1)" });
+      setFlippedCards((prev) => ({ ...prev, [docId]: false }));
+      setActiveCardId(null);
+
+      if (inner) gsap.to(inner, { rotationY: 0, duration: 0.5, ease: 'back.out(1.1)' });
       gsap.to(cardEl, {
-        x: parseFloat(cardEl.dataset.posX || "0"),
-        y: parseFloat(cardEl.dataset.posY || "0"),
-        zIndex: parseInt(cardEl.dataset.baseZIndex || "1", 10),
+        x: parseFloat(cardEl.dataset.posX || '0'),
+        y: parseFloat(cardEl.dataset.posY || '0'),
+        zIndex: parseInt(cardEl.dataset.baseZIndex || '1', 10),
         duration: 0.4,
       });
       if (wrapper) {
-        gsap.to(wrapper, { rotationY: -38, rotationX: 12, scale: 1, duration: 0.4 });
+        gsap.to(wrapper, {
+          rotationY: -38,
+          rotationX: 12,
+          scale: 1,
+          duration: 0.4,
+        });
       }
     }
   };
 
-  const exportPng = async () => {
-    if (!stageRef.current) return;
+  const handleExportPng = async () => {
+    if (!stageViewportRef.current) return;
     setIsExporting(true);
+
     try {
-      const canvas = await toCanvas(stageRef.current, {
+      const dataUrl = await htmlToImage.toPng(stageViewportRef.current, {
         quality: 1.0,
         pixelRatio: 2,
-        cacheBust: true,
-        backgroundColor: "#e8e6e7",
+        backgroundColor: '#e8e6e7',
       });
-      const dataUrl = canvas.toDataURL("image/png");
-      const link = document.createElement("a");
-      link.download = "pdf-staircase-3d.png";
+
+      const link = document.createElement('a');
+      link.download = 'pdf-staircase-3d.png';
       link.href = dataUrl;
       link.click();
     } catch (err) {
-      console.error("Export failed:", err);
+      console.error('3D Export failed:', err);
     } finally {
       setIsExporting(false);
     }
   };
 
   return (
-    <div className="flex flex-col w-full h-full bg-[#e8e6e7] text-[#222]">
-      <div className="flex justify-between items-center px-6 py-4 bg-white/85 backdrop-blur-md border-b border-gray-300 z-50">
-        <h2 className="text-sm font-semibold tracking-wide text-gray-700 uppercase">
-          3D Staircase Proofing View
-        </h2>
-        <button
-          onClick={exportPng}
-          disabled={isExporting || documents.length === 0}
-          className="px-4 py-2 text-sm font-semibold text-gray-800 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 transition-colors"
-        >
-          {isExporting ? "⌛ Exporting..." : "📸 Export Rendering (PNG)"}
-        </button>
-      </div>
-
-      <div className="flex flex-1 overflow-hidden relative">
-        <aside className="w-80 bg-white/90 backdrop-blur-md border-r border-gray-300 p-5 z-40 flex flex-col shadow-sm">
-          <h3 className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-4 pb-2 border-b border-gray-200">
-            Document Index
+    <div style={{ display: 'flex', flex: 1, width: '100%', height: '100%', position: 'relative', overflow: 'hidden', backgroundColor: '#e8e6e7' }}>
+      {/* LEFT SIDEBAR: DOCUMENT INDEX */}
+      <aside
+        style={{
+          width: '320px',
+          backgroundColor: 'rgba(255, 255, 255, 0.9)',
+          backdropFilter: 'blur(10px)',
+          borderRight: '1px solid #ccc',
+          display: 'flex',
+          flexDirection: 'column',
+          padding: '20px',
+          zIndex: 100,
+          boxShadow: '2px 0 10px rgba(0,0,0,0.05)',
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', paddingBottom: '8px', borderBottom: '1px solid #eee' }}>
+          <h3 style={{ fontSize: '14px', textTransform: 'uppercase', letterSpacing: '0.8px', color: '#666', margin: 0 }}>
+            Document Index ({documents.length})
           </h3>
-          <div className="flex-1 overflow-y-auto space-y-3">
-            {documents.length === 0 ? (
-              <p className="text-xs italic text-gray-500">No documents loaded.</p>
-            ) : (
-              documents.map((doc, idx) => {
-                const formatInfo = classifyPdfFormat(doc.widthPt, doc.heightPt);
-                const isActive = activeCardId === doc.id || flippedCards[doc.id];
+          <button
+            onClick={handleExportPng}
+            disabled={isExporting || documents.length === 0}
+            style={{
+              padding: '6px 12px',
+              fontSize: '11px',
+              fontWeight: 700,
+              backgroundColor: isExporting ? '#94a3b8' : '#0066ff',
+              color: '#ffffff',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: isExporting || documents.length === 0 ? 'not-allowed' : 'pointer',
+            }}
+          >
+            {isExporting ? '⌛ Exporting...' : '📸 Export PNG'}
+          </button>
+        </div>
 
-                return (
-                  <div
-                    key={doc.id}
-                    className={`p-3 bg-white border rounded-md flex gap-2.5 items-start cursor-pointer transition-all ${
-                      isActive
-                        ? "border-blue-600 shadow-md translate-x-1"
-                        : "border-gray-200 hover:border-blue-500"
-                    }`}
-                    onMouseEnter={() => handleCardHover(doc.id, true)}
-                    onMouseLeave={() => handleCardHover(doc.id, false)}
-                    onClick={() => handleCardClick(doc.id)}
-                  >
-                    <span className="bg-blue-600 text-white text-[11px] font-extrabold px-1.5 py-0.5 rounded shadow-sm">
-                      #{idx + 1}
-                    </span>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-xs font-bold text-gray-900 truncate" title={doc.name}>
-                        {doc.name}
-                      </div>
-                      <div className="flex gap-1 mt-1 flex-wrap">
-                        <span className="text-[10px] bg-gray-100 px-1.5 py-0.5 rounded font-semibold uppercase text-gray-700">
-                          {formatInfo.label}
-                        </span>
-                        <span className="text-[10px] bg-gray-200 px-1.5 py-0.5 rounded font-semibold uppercase text-gray-700">
-                          {doc.pageCount} {doc.pageCount === 1 ? "Pg" : "Pgs"}
-                        </span>
-                      </div>
-                      <div className="text-[11px] text-gray-500 mt-1">
-                        Dim: {formatInfo.dims} • {formatInfo.aspectRatioStr}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
-        </aside>
-
-        <main ref={stageRef} className="flex-1 relative p-10 overflow-auto perspective-[1200px]">
-          {documents.length === 0 && (
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-gray-500 text-base text-center">
-              Upload PDF files to view them in the 3D Staircase stack.
-            </div>
-          )}
-
-          <div ref={cardStackRef} className="absolute top-0 left-0 origin-top-left">
-            {documents.map((doc, idx) => {
+        <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          {documents.length === 0 ? (
+            <p style={{ color: '#888', fontSize: '13px', fontStyle: 'italic' }}>No documents loaded. Upload PDFs in the 2D Workbench.</p>
+          ) : (
+            documents.map((doc, idx) => {
               const formatInfo = classifyPdfFormat(doc.widthPt, doc.heightPt);
-              const markerLabel = `#${idx + 1}`;
+              const isActive = activeCardId === doc.id;
 
               return (
                 <div
                   key={doc.id}
-                  id={`card-${doc.id}`}
-                  data-id={doc.id}
-                  data-width-px={formatInfo.calculatedWidthPx}
-                  data-height-px={formatInfo.calculatedHeightPx}
-                  className="stacked-card absolute top-0 left-0 flex flex-col cursor-pointer transition-none [transform-style:preserve-3d]"
+                  onMouseEnter={() => handleCardMouseEnter(doc.id)}
+                  onMouseLeave={() => handleCardMouseLeave(doc.id)}
+                  onClick={() => handleCardClick(doc.id)}
                   style={{
-                    width: `${formatInfo.calculatedWidthPx}px`,
-                    height: `${formatInfo.calculatedHeightPx}px`,
-                  }}
-                  onMouseEnter={() => handleCardHover(doc.id, true)}
-                  onMouseLeave={() => handleCardHover(doc.id, false)}
-                  onClick={(e) => {
-                    if ((e.target as HTMLElement).closest(".remove-btn")) return;
-                    handleCardClick(doc.id);
+                    backgroundColor: '#ffffff',
+                    border: '1px solid',
+                    borderColor: isActive ? '#0066ff' : '#e0e0e0',
+                    borderRadius: '6px',
+                    padding: '12px',
+                    display: 'flex',
+                    gap: '10px',
+                    alignItems: 'flex-start',
+                    cursor: 'pointer',
+                    boxShadow: isActive ? '0 4px 12px rgba(0, 102, 255, 0.15)' : 'none',
+                    transform: isActive ? 'translateX(4px)' : 'none',
+                    transition: 'all 0.2s ease',
                   }}
                 >
-                  <div className="absolute top-2 left-2 z-10 pointer-events-none">
-                    <span className="bg-blue-600 text-white text-[11px] font-extrabold px-1.5 py-0.5 rounded shadow">
-                      {markerLabel}
-                    </span>
-                  </div>
-
-                  <div className="stacked-card__inner-wrapper relative w-full h-full [transform-style:preserve-3d]">
-                    <div className="stacked-card__inner relative w-full h-full [transform-style:preserve-3d]">
-                      <div className="stacked-card__face absolute inset-0 bg-white shadow-xl overflow-hidden [backface-visibility:hidden] z-10">
-                        <img
-                          src={doc.frontImageUrl}
-                          alt={`${doc.name} (Front)`}
-                          className="w-full h-full object-fill block"
-                        />
-                      </div>
-
-                      <div className="stacked-card__face absolute inset-0 bg-gray-50 shadow-xl overflow-hidden [backface-visibility:hidden] [transform:rotateY(180deg)] flex flex-col justify-between">
-                        {doc.backImageUrl ? (
-                          <div className="w-full h-full">
-                            <img
-                              src={doc.backImageUrl}
-                              alt={`${doc.name} (Back)`}
-                              className="w-full h-full object-fill block"
-                            />
-                          </div>
-                        ) : (
-                          <div className="flex-1 flex items-center justify-center text-xs text-gray-400 italic">
-                            No page 2 preview
-                          </div>
-                        )}
-
-                        {onRemoveDocument && (
-                          <div className="p-3 flex justify-center bg-white/80">
-                            <button
-                              className="remove-btn bg-red-600 text-white text-xs px-3 py-1.5 rounded font-semibold hover:bg-red-700 transition-colors"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onRemoveDocument(doc.id);
-                              }}
-                            >
-                              Remove
-                            </button>
-                          </div>
-                        )}
-                      </div>
+                  <span
+                    style={{
+                      backgroundColor: '#0066ff',
+                      color: '#ffffff',
+                      fontSize: '11px',
+                      fontWeight: 800,
+                      padding: '3px 7px',
+                      borderRadius: '4px',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    #{idx + 1}
+                  </span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: '13px', fontWeight: 700, color: '#111', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginBottom: '4px' }} title={doc.name}>
+                      {doc.name}
+                    </div>
+                    <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginTop: '4px' }}>
+                      <span style={{ fontSize: '10px', background: '#eee', padding: '2px 6px', borderRadius: '3px', fontWeight: 600, textTransform: 'uppercase' }}>
+                        {formatInfo.label}
+                      </span>
+                      <span style={{ fontSize: '10px', background: '#e0e0e0', padding: '2px 6px', borderRadius: '3px', fontWeight: 600, textTransform: 'uppercase' }}>
+                        {doc.pageCount || 1} Pg
+                      </span>
+                    </div>
+                    <div style={{ fontSize: '11px', color: '#666', marginTop: '4px' }}>
+                      Dim: {formatInfo.dims} • {formatInfo.aspectRatioStr}
                     </div>
                   </div>
                 </div>
               );
-            })}
+            })
+          )}
+        </div>
+      </aside>
+
+      {/* RIGHT STAGE: 3D STAIRCASE VIEWPORT */}
+      <main ref={stageViewportRef} style={{ flex: 1, position: 'relative', perspective: '1200px', padding: '40px', overflow: 'auto' }}>
+        {documents.length === 0 && (
+          <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', color: '#777', fontSize: '16px', textAlign: 'center' }}>
+            Upload PDF files in the 2D Workbench to view them in the 3D Staircase stack.
           </div>
-        </main>
-      </div>
+        )}
+
+        <div ref={stackContainerRef} style={{ position: 'absolute', top: 0, left: 0, transformOrigin: 'top left' }}>
+          {documents.map((doc, idx) => {
+            const formatInfo = classifyPdfFormat(doc.widthPt, doc.heightPt);
+
+            return (
+              <div
+                key={doc.id}
+                ref={(el) => {
+                  if (el) cardRefs.current.set(doc.id, el);
+                  else cardRefs.current.delete(doc.id);
+                }}
+                onMouseEnter={() => handleCardMouseEnter(doc.id)}
+                onMouseLeave={() => handleCardMouseLeave(doc.id)}
+                onClick={(e) => {
+                  if ((e.target as HTMLElement).classList.contains('remove-btn')) return;
+                  handleCardClick(doc.id);
+                }}
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: `${formatInfo.calculatedWidthPx}px`,
+                  height: `${formatInfo.calculatedHeightPx}px`,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  transformStyle: 'preserve-3d',
+                  cursor: 'pointer',
+                }}
+              >
+                {/* Surface Badge */}
+                <div style={{ position: 'absolute', top: '8px', left: '8px', zIndex: 10, pointerEvents: 'none' }}>
+                  <span style={{ backgroundColor: '#0066ff', color: '#ffffff', fontSize: '11px', fontWeight: 800, padding: '3px 7px', borderRadius: '4px' }}>
+                    #{idx + 1}
+                  </span>
+                </div>
+
+                {/* 3D Wrapper Hierarchy */}
+                <div className="stacked-card__inner-wrapper" style={{ position: 'relative', width: '100%', height: '100%', transformStyle: 'preserve-3d' }}>
+                  <div className="stacked-card__inner" style={{ position: 'relative', width: '100%', height: '100%', transformStyle: 'preserve-3d', transition: 'transform 0.6s cubic-bezier(0.4, 0, 0.2, 1)' }}>
+                    
+                    {/* Front Face */}
+                    <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', backfaceVisibility: 'hidden', background: '#fff', boxShadow: '0 10px 25px rgba(0,0,0,0.15)', overflow: 'hidden', zIndex: 2 }}>
+                      <img src={doc.frontImageUrl} alt={`${doc.name} (Front)`} style={{ width: '100%', height: '100%', objectFit: 'fill', display: 'block' }} />
+                    </div>
+
+                    {/* Back Face */}
+                    <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', backfaceVisibility: 'hidden', transform: 'rotateY(180deg)', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', background: '#f9f9f9', boxShadow: '0 10px 25px rgba(0,0,0,0.15)' }}>
+                      {doc.backImageUrl ? (
+                        <div style={{ width: '100%', height: 'calc(100% - 48px)', overflow: 'hidden' }}>
+                          <img src={doc.backImageUrl} alt={`${doc.name} (Back)`} style={{ width: '100%', height: '100%', objectFit: 'fill', display: 'block' }} />
+                        </div>
+                      ) : (
+                        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#888', fontSize: '12px' }}>
+                          Single Sided Document
+                        </div>
+                      )}
+                      
+                      <div style={{ padding: '10px', display: 'flex', justifyContent: 'center', backgroundColor: '#ffffff', borderTop: '1px solid #eee' }}>
+                        <button
+                          className="remove-btn"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (onRemoveDocument) onRemoveDocument(doc.id);
+                          }}
+                          style={{ backgroundColor: '#ff3b30', color: '#ffffff', border: 'none', padding: '6px 14px', borderRadius: '4px', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </main>
     </div>
   );
-};
+}
