@@ -24,3 +24,17 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* 3D Staircase CSS Utilities */
+.perspective-\[1200px\] {
+  perspective: 1200px;
+}
+
+.stacked-card__inner-wrapper,
+.stacked-card__inner {
+  transform-style: preserve-3d;
+}
+
+.stacked-card__face {
+  backface-visibility: hidden;
+}
