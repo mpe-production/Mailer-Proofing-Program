@@ -239,7 +239,7 @@ function DynamicInsertView({
         boxShadow: '0 2px 4px rgba(0,0,0,0.08)',
       }}
     >
-      {/* 2D UNIFIED BLUE BADGE */}
+{/* 2D UNIFIED BLUE BADGE (FIXED VERTICAL CENTERING FOR CANVAS) */}
       <div
         style={{
           position: 'absolute',
@@ -247,19 +247,21 @@ function DynamicInsertView({
           left: '4px',
           backgroundColor: '#0066ff',
           color: '#ffffff',
-          fontSize: '0.60rem',
+          fontSize: '10px',
           fontWeight: 700,
           letterSpacing: '0.03em',
-          padding: '3px 6px',
+          height: '18px',
+          lineHeight: '18px',
+          padding: '0 6px',
           borderRadius: '3px',
           zIndex: 10,
           pointerEvents: 'none',
           boxShadow: '0 1px 2px rgba(0,0,0,0.2)',
           textTransform: 'uppercase',
-          display: 'inline-flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          lineHeight: 1,
+          display: 'block',
+          textAlign: 'center',
+          boxSizing: 'border-box',
+          whiteSpace: 'nowrap',
         }}
       >
         {getLabelText()}
