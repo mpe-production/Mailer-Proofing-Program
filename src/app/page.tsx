@@ -463,16 +463,16 @@ export default function DirectMailWorkbench() {
     await new Promise((resolve) => setTimeout(resolve, 150));
 
     try {
-      // 1. Capture 2D Viewport Canvas
+      // 1. Capture 2D Viewport Canvas at high resolution
       const canvas2d = await html2canvas(capture2dElement, {
-        scale: 3,
+        scale: 4,
         useCORS: true,
         allowTaint: true,
         backgroundColor: null,
       });
       const img2dData = canvas2d.toDataURL('image/png');
 
-      // 2. Capture 3D Stage Area & Crop strictly to the card stack with padding
+      // 2. Capture 3D Stage Area & Crop to Landscape Banner Format
       let img3dData: string | null = null;
       const container3d = staircaseContainerRef.current;
       const stage3d = staircaseStageRef.current || container3d;
@@ -494,7 +494,7 @@ export default function DirectMailWorkbench() {
         await new Promise((resolve) => setTimeout(resolve, 250));
 
         try {
-          const scaleFactor = 2;
+          const scaleFactor = 3; // High resolution to eliminate pixelation
           const fullCanvas3d = await html2canvas(stage3d, {
             scale: scaleFactor,
             useCORS: true,
@@ -506,17 +506,16 @@ export default function DirectMailWorkbench() {
             const stageRect = stage3d.getBoundingClientRect();
             const stackRect = stack3d.getBoundingClientRect();
 
-            const paddingPx = 30; // Buffer padding in pixels around the card stack
+            const paddingPx = 40; // Buffer padding around the stack
 
-            // Calculate crop bounds relative to the 3D stage area
-            const rawCropX = stackRect.left - stageRect.left - paddingPx;
+            // Span full stage width horizontally, crop tightly to stack height vertically
+            const cropX = 0;
+            const cropW = stageRect.width;
+
             const rawCropY = stackRect.top - stageRect.top - paddingPx;
-            const rawCropW = stackRect.width + paddingPx * 2;
             const rawCropH = stackRect.height + paddingPx * 2;
 
-            const cropX = Math.max(0, rawCropX);
             const cropY = Math.max(0, rawCropY);
-            const cropW = Math.min(stageRect.width - cropX, rawCropW);
             const cropH = Math.min(stageRect.height - cropY, rawCropH);
 
             const croppedCanvas = document.createElement('canvas');
@@ -568,57 +567,42 @@ export default function DirectMailWorkbench() {
       const page = pdfDoc.getPages()[0];
       const { height: pageHeight } = page.getSize();
 
-      // 4. Helper to draw image inside box bounds (paddingFactor = 1.0 fills 100% of Magenta box)
+      // 4. Helper to draw image filling the target container box completely
       const drawImageInBox = async (
         dataUrl: string,
         boxXPt: number,
         boxTopYPt: number,
         boxWPt: number,
-        boxHPt: number,
-        paddingFactor = 1.0
+        boxHPt: number
       ) => {
         const image = await pdfDoc.embedPng(dataUrl);
-        const imgW = image.width;
-        const imgH = image.height;
-
-        const paddedBoxW = boxWPt * paddingFactor;
-        const paddedBoxH = boxHPt * paddingFactor;
-
-        const scale = Math.min(paddedBoxW / imgW, paddedBoxH / imgH);
-        const drawW = imgW * scale;
-        const drawH = imgH * scale;
-
-        const offsetX = boxXPt + (boxWPt - drawW) / 2;
         const pdfYBottom = pageHeight - boxTopYPt - boxHPt;
-        const offsetY = pdfYBottom + (boxHPt - drawH) / 2;
 
         page.drawImage(image, {
-          x: offsetX,
-          y: offsetY,
-          width: drawW,
-          height: drawH,
+          x: boxXPt,
+          y: pdfYBottom,
+          width: boxWPt,
+          height: boxHPt,
         });
       };
 
-      // 5. Draw 2D View inside Magenta Container (#ec008c) - 1.0 scale factor
+      // 5. Draw 2D View inside Magenta Container (#ec008c) - Fills exact container dimensions
       await drawImageInBox(
         img2dData,
         0.3575 * 72,
         2.5342 * 72,
         7.7968 * 72,
-        3.9473 * 72,
-        1.0
+        3.9473 * 72
       );
 
-      // 6. Draw Cropped 3D Stage inside Cyan Container (#00aeef)
+      // 6. Draw 3D View inside Cyan Container (#00aeef) - Fills exact container dimensions
       if (img3dData) {
         await drawImageInBox(
           img3dData,
           0.3575 * 72,
           6.7315 * 72,
           7.7968 * 72,
-          3.9473 * 72,
-          0.98
+          3.9473 * 72
         );
       }
 
