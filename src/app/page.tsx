@@ -451,7 +451,7 @@ export default function DirectMailWorkbench() {
     });
   };
 
-  /// OVERLAY PDF TEMPLATE GENERATOR
+  // OVERLAY PDF TEMPLATE GENERATOR
   const handleExportPdf = async () => {
     const capture2dElement = envelopeWrapperRef.current || envelopeRef.current;
     if (!capture2dElement) return;
@@ -463,16 +463,91 @@ export default function DirectMailWorkbench() {
     await new Promise((resolve) => setTimeout(resolve, 150));
 
     try {
-      // 1. Capture 2D Viewport Canvas at high resolution
-      const canvas2d = await html2canvas(capture2dElement, {
-        scale: 4,
+      // Target aspect ratio matching template boxes (7.7968" / 3.9473" = ~1.9752)
+      const targetRatio = 7.7968 / 3.9473;
+
+      // -------------------------------------------------------------
+      // 1. CAPTURE & CROP 2D VIEWPORT (TRIM EXTRA SCREEN WHITESPACE)
+      // -------------------------------------------------------------
+      const scaleFactor2d = 3;
+      const fullCanvas2d = await html2canvas(capture2dElement, {
+        scale: scaleFactor2d,
         useCORS: true,
         allowTaint: true,
         backgroundColor: null,
       });
-      const img2dData = canvas2d.toDataURL('image/png');
 
-      // 2. Capture 3D Stage Area & Crop Tightly Around Card Stack
+      let img2dData: string = fullCanvas2d.toDataURL('image/png');
+
+      if (envelopeRef.current) {
+        const wrapperRect = capture2dElement.getBoundingClientRect();
+        const envelopeRect = envelopeRef.current.getBoundingClientRect();
+
+        let minX = envelopeRect.left;
+        let minY = envelopeRect.top;
+        let maxX = envelopeRect.right;
+        let maxY = envelopeRect.bottom;
+
+        // Expand bounding box to cover staggered/fanned-out inserts
+        const childElements = envelopeRef.current.querySelectorAll('*');
+        childElements.forEach((el) => {
+          const r = el.getBoundingClientRect();
+          if (r.width > 0 && r.height > 0) {
+            if (r.left < minX) minX = r.left;
+            if (r.top < minY) minY = r.top;
+            if (r.right > maxX) maxX = r.right;
+            if (r.bottom > maxY) maxY = r.bottom;
+          }
+        });
+
+        const paddingPx = 20;
+        const contentCenterX = (minX + maxX) / 2 - wrapperRect.left;
+        const contentCenterY = (minY + maxY) / 2 - wrapperRect.top;
+
+        const neededW = (maxX - minX) + paddingPx * 2;
+        const neededH = (maxY - minY) + paddingPx * 2;
+
+        let cropW = neededW;
+        let cropH = neededH;
+
+        if (cropW / cropH < targetRatio) {
+          cropW = cropH * targetRatio;
+        } else {
+          cropH = cropW / targetRatio;
+        }
+
+        let cropX = Math.max(0, contentCenterX - cropW / 2);
+        let cropY = Math.max(0, contentCenterY - cropH / 2);
+
+        if (cropX + cropW > wrapperRect.width) cropX = Math.max(0, wrapperRect.width - cropW);
+        if (cropY + cropH > wrapperRect.height) cropY = Math.max(0, wrapperRect.height - cropH);
+        cropW = Math.min(wrapperRect.width - cropX, cropW);
+        cropH = Math.min(wrapperRect.height - cropY, cropH);
+
+        const croppedCanvas2d = document.createElement('canvas');
+        croppedCanvas2d.width = cropW * scaleFactor2d;
+        croppedCanvas2d.height = cropH * scaleFactor2d;
+        const ctx2d = croppedCanvas2d.getContext('2d');
+
+        if (ctx2d) {
+          ctx2d.drawImage(
+            fullCanvas2d,
+            cropX * scaleFactor2d,
+            cropY * scaleFactor2d,
+            cropW * scaleFactor2d,
+            cropH * scaleFactor2d,
+            0,
+            0,
+            cropW * scaleFactor2d,
+            cropH * scaleFactor2d
+          );
+          img2dData = croppedCanvas2d.toDataURL('image/png');
+        }
+      }
+
+      // -------------------------------------------------------------
+      // 2. CAPTURE & CROP 3D VIEWPORT (MATCH ASPECT RATIO TO CYAN BOX)
+      // -------------------------------------------------------------
       let img3dData: string | null = null;
       const container3d = staircaseContainerRef.current;
       const stage3d = staircaseStageRef.current || container3d;
@@ -494,9 +569,9 @@ export default function DirectMailWorkbench() {
         await new Promise((resolve) => setTimeout(resolve, 250));
 
         try {
-          const scaleFactor = 3; // High resolution rendering
+          const scaleFactor3d = 3;
           const fullCanvas3d = await html2canvas(stage3d, {
-            scale: scaleFactor,
+            scale: scaleFactor3d,
             useCORS: true,
             allowTaint: true,
             backgroundColor: '#e8e6e7',
@@ -506,37 +581,48 @@ export default function DirectMailWorkbench() {
             const stageRect = stage3d.getBoundingClientRect();
             const stackRect = stack3d.getBoundingClientRect();
 
-            const paddingPx = 30; // 30px buffer around 3D elements
+            const paddingPx = 30;
+            const stackCenterX = (stackRect.left + stackRect.right) / 2 - stageRect.left;
+            const stackCenterY = (stackRect.top + stackRect.bottom) / 2 - stageRect.top;
 
-            // Crop tightly around the 3D card stack bounds
-            const rawCropX = stackRect.left - stageRect.left - paddingPx;
-            const rawCropY = stackRect.top - stageRect.top - paddingPx;
-            const rawCropW = stackRect.width + paddingPx * 2;
-            const rawCropH = stackRect.height + paddingPx * 2;
+            const neededW = stackRect.width + paddingPx * 2;
+            const neededH = stackRect.height + paddingPx * 2;
 
-            const cropX = Math.max(0, rawCropX);
-            const cropY = Math.max(0, rawCropY);
-            const cropW = Math.min(stageRect.width - cropX, rawCropW);
-            const cropH = Math.min(stageRect.height - cropY, rawCropH);
+            let cropW = neededW;
+            let cropH = neededH;
 
-            const croppedCanvas = document.createElement('canvas');
-            croppedCanvas.width = cropW * scaleFactor;
-            croppedCanvas.height = cropH * scaleFactor;
-            const ctx = croppedCanvas.getContext('2d');
+            if (cropW / cropH < targetRatio) {
+              cropW = cropH * targetRatio;
+            } else {
+              cropH = cropW / targetRatio;
+            }
 
-            if (ctx) {
-              ctx.drawImage(
+            let cropX = Math.max(0, stackCenterX - cropW / 2);
+            let cropY = Math.max(0, stackCenterY - cropH / 2);
+
+            if (cropX + cropW > stageRect.width) cropX = Math.max(0, stageRect.width - cropW);
+            if (cropY + cropH > stageRect.height) cropY = Math.max(0, stageRect.height - cropH);
+            cropW = Math.min(stageRect.width - cropX, cropW);
+            cropH = Math.min(stageRect.height - cropY, cropH);
+
+            const croppedCanvas3d = document.createElement('canvas');
+            croppedCanvas3d.width = cropW * scaleFactor3d;
+            croppedCanvas3d.height = cropH * scaleFactor3d;
+            const ctx3d = croppedCanvas3d.getContext('2d');
+
+            if (ctx3d) {
+              ctx3d.drawImage(
                 fullCanvas3d,
-                cropX * scaleFactor,
-                cropY * scaleFactor,
-                cropW * scaleFactor,
-                cropH * scaleFactor,
+                cropX * scaleFactor3d,
+                cropY * scaleFactor3d,
+                cropW * scaleFactor3d,
+                cropH * scaleFactor3d,
                 0,
                 0,
-                cropW * scaleFactor,
-                cropH * scaleFactor
+                cropW * scaleFactor3d,
+                cropH * scaleFactor3d
               );
-              img3dData = croppedCanvas.toDataURL('image/png');
+              img3dData = croppedCanvas3d.toDataURL('image/png');
             } else {
               img3dData = fullCanvas3d.toDataURL('image/png');
             }
@@ -557,7 +643,9 @@ export default function DirectMailWorkbench() {
         }
       }
 
-      // 3. Load PDF Template
+      // -------------------------------------------------------------
+      // 3. LOAD PDF TEMPLATE & EMBED IMAGES
+      // -------------------------------------------------------------
       const templateRes = await fetch('/templates/mailer-sequence-proof-template.pdf');
       if (!templateRes.ok) {
         throw new Error(`Template PDF not found (Status ${templateRes.status})`);
@@ -568,7 +656,6 @@ export default function DirectMailWorkbench() {
       const page = pdfDoc.getPages()[0];
       const { height: pageHeight } = page.getSize();
 
-      // 4. Helper to draw image PROPORTIONALLY centered inside container box
       const drawImageInBoxProportional = async (
         dataUrl: string,
         boxXPt: number,
@@ -580,12 +667,10 @@ export default function DirectMailWorkbench() {
         const imgW = image.width;
         const imgH = image.height;
 
-        // Proportional scale factor (contain fit)
         const scale = Math.min(boxWPt / imgW, boxHPt / imgH);
         const drawW = imgW * scale;
         const drawH = imgH * scale;
 
-        // Center horizontally & vertically inside the container box
         const offsetX = boxXPt + (boxWPt - drawW) / 2;
         const pdfYBottom = pageHeight - boxTopYPt - boxHPt;
         const offsetY = pdfYBottom + (boxHPt - drawH) / 2;
@@ -598,7 +683,7 @@ export default function DirectMailWorkbench() {
         });
       };
 
-      // 5. Draw 2D View inside Magenta Container (#ec008c) - Proportional Contain Fit
+      // Draw 2D View inside Magenta Container (#ec008c)
       await drawImageInBoxProportional(
         img2dData,
         0.3575 * 72,
@@ -607,7 +692,7 @@ export default function DirectMailWorkbench() {
         3.9473 * 72
       );
 
-      // 6. Draw 3D View inside Cyan Container (#00aeef) - Proportional Contain Fit
+      // Draw 3D View inside Cyan Container (#00aeef)
       if (img3dData) {
         await drawImageInBoxProportional(
           img3dData,
@@ -618,7 +703,9 @@ export default function DirectMailWorkbench() {
         );
       }
 
-      // 7. Save & Trigger Download
+      // -------------------------------------------------------------
+      // 4. DOWNLOAD RESULTING PDF
+      // -------------------------------------------------------------
       const pdfBytes = await pdfDoc.save();
       const blob = new Blob([pdfBytes.buffer as ArrayBuffer], { type: 'application/pdf' });
       const downloadUrl = URL.createObjectURL(blob);
