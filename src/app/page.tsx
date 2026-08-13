@@ -537,7 +537,7 @@ export default function DirectMailWorkbench() {
 
       // 7. Generate PDF Download
       const pdfBytes = await pdfDoc.save();
-      const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+      const blob = new Blob([pdfBytes.buffer as ArrayBuffer], { type: 'application/pdf' });
       const downloadUrl = URL.createObjectURL(blob);
 
       const a = document.createElement('a');
