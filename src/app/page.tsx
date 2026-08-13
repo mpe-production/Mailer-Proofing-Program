@@ -4,7 +4,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import html2canvas from 'html2canvas';
-import { PDFDocument } from 'pdf-lib';
+import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import EnvelopeBottomFlap from '@/components/EnvelopeBottomFlap';
 import type { UploadedInsertData, MailerComponentType } from '@/components/PdfDropzone';
 import type { LoadedPdfDocument } from '@/components/StaircaseView';
@@ -287,6 +287,10 @@ function DynamicInsertView({
 export default function DirectMailWorkbench() {
   const [viewMode, setViewMode] = useState<'2d' | '3d'>('2d');
 
+// User Input
+  const [attnName, setAttnName] = useState<string>('11111');
+  const [jobNumber, setJobNumber] = useState<string>('22222');
+
   // Envelope Presets
   const [envelopePreset, setEnvelopePreset] = useState<EnvelopePresetType>('no10_commercial');
   const [envelopeWidth, setEnvelopeWidth] = useState<number>(9.5);
@@ -464,7 +468,7 @@ export default function DirectMailWorkbench() {
     });
   };
 
-// OVERLAY PDF TEMPLATE GENERATOR
+/// OVERLAY PDF TEMPLATE GENERATOR
   const handleExportPdf = async () => {
     const capture2dElement = envelopeWrapperRef.current || envelopeRef.current;
     if (!capture2dElement) return;
@@ -558,7 +562,7 @@ export default function DirectMailWorkbench() {
       }
 
       // -------------------------------------------------------------
-      // 2. CAPTURE & CROP 3D VIEWPORT (HIGH-RES + UNION CARDS BOUNDING BOX)
+      // 2. CAPTURE & CROP 3D VIEWPORT
       // -------------------------------------------------------------
       let img3dData: string | null = null;
       const container3d = staircaseContainerRef.current;
@@ -570,7 +574,6 @@ export default function DirectMailWorkbench() {
         const originalWidth = container3d.style.width;
         const originalHeight = container3d.style.height;
 
-        // Force hi-res viewport off-screen (2400px x 1600px)
         container3d.style.display = 'flex';
         container3d.style.position = 'fixed';
         container3d.style.top = '-9999px';
@@ -578,10 +581,7 @@ export default function DirectMailWorkbench() {
         container3d.style.width = '2400px';
         container3d.style.height = '1600px';
 
-        // Trigger resize for GSAP auto-fit calculation
         window.dispatchEvent(new Event('resize'));
-
-        // Wait 600ms for GSAP animations (0.4s) and DOM layout to fully settle
         await new Promise((resolve) => setTimeout(resolve, 600));
 
         try {
@@ -593,7 +593,6 @@ export default function DirectMailWorkbench() {
             backgroundColor: '#e8e6e7',
           });
 
-          // Measure true union bounding box across ALL rendered 3D cards
           const cardElements = stage3d.querySelectorAll('.stacked-card, [class*="stacked-card"]');
           let minX = Infinity;
           let minY = Infinity;
@@ -688,7 +687,7 @@ export default function DirectMailWorkbench() {
       }
 
       // -------------------------------------------------------------
-      // 3. LOAD PDF TEMPLATE & EMBED IMAGES
+      // 3. LOAD PDF TEMPLATE & EMBED IMAGES & CUSTOM USER INPUT TEXT
       // -------------------------------------------------------------
       const templateRes = await fetch('/templates/mailer-sequence-proof-template.pdf');
       if (!templateRes.ok) {
@@ -699,6 +698,44 @@ export default function DirectMailWorkbench() {
       const pdfDoc = await PDFDocument.load(templateArrayBuffer);
       const page = pdfDoc.getPages()[0];
       const { height: pageHeight } = page.getSize();
+
+      const helveticaBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+      // Draw user input values over template placeholder areas
+      // White rectangle overlays to obscure default template text if needed
+      page.drawRectangle({
+        x: 485,
+        y: pageHeight - 78,
+        width: 110,
+        height: 14,
+        color: rgb(1, 1, 1),
+      });
+
+      page.drawRectangle({
+        x: 485,
+        y: pageHeight - 96,
+        width: 110,
+        height: 14,
+        color: rgb(1, 1, 1),
+      });
+
+      // Draw custom Attn: Name
+      page.drawText(attnName, {
+        x: 485,
+        y: pageHeight - 74,
+        size: 10,
+        font: helveticaBold,
+        color: rgb(0, 0, 0),
+      });
+
+      // Draw custom Job #
+      page.drawText(jobNumber, {
+        x: 485,
+        y: pageHeight - 92,
+        size: 10,
+        font: helveticaBold,
+        color: rgb(0, 0, 0),
+      });
 
       const drawImageInBoxProportional = async (
         dataUrl: string,
@@ -840,9 +877,37 @@ export default function DirectMailWorkbench() {
       {/* APP BODY */}
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
         
-        {/* SIDEBAR (VISIBLE ONLY IN 2D MODE) */}
+{/* SIDEBAR (VISIBLE ONLY IN 2D MODE) */}
         {viewMode === '2d' && (
           <aside style={{ width: '380px', backgroundColor: '#ffffff', borderRight: '1px solid #e2e8f0', padding: '24px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            
+            {/* PROOF METADATA SECTION */}
+            <section style={{ backgroundColor: '#ffffff', padding: '16px', borderRadius: '8px', border: '1px solid #cbd5e1' }}>
+              <h2 style={{ fontSize: '0.85rem', fontWeight: 700, margin: '0 0 12px 0', color: '#0f172a' }}>Proof Metadata</h2>
+              
+              <div style={{ marginBottom: '12px' }}>
+                <label style={labelStyle}>Attn (Name / Recipient):</label>
+                <input
+                  type="text"
+                  value={attnName}
+                  onChange={(e) => setAttnName(e.target.value)}
+                  placeholder="e.g. John Doe"
+                  style={inputStyle}
+                />
+              </div>
+
+              <div>
+                <label style={labelStyle}>Job #:</label>
+                <input
+                  type="text"
+                  value={jobNumber}
+                  onChange={(e) => setJobNumber(e.target.value)}
+                  placeholder="e.g. 12345"
+                  style={inputStyle}
+                />
+              </div>
+            </section>
+
             {/* UPLOADER */}
             <section style={{ backgroundColor: '#f8fafc', padding: '16px', borderRadius: '8px', border: '1px solid #cbd5e1' }}>
               <h2 style={{ fontSize: '0.85rem', fontWeight: 700, margin: '0 0 8px 0', color: '#0f172a' }}>Upload Component</h2>
