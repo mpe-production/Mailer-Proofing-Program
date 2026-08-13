@@ -29,7 +29,8 @@ export interface StaircaseViewProps {
   stackRef?: React.RefObject<HTMLDivElement | null>;
 }
 
-const PX_PER_INCH = 96;
+// Balance resolution and viewport scaling in 3D perspective
+const PX_PER_INCH = 48;
 
 function classifyPdfFormat(widthPt: number, heightPt: number) {
   const widthInches = widthPt / 72;
@@ -66,7 +67,7 @@ function classifyPdfFormat(widthPt: number, heightPt: number) {
   };
 }
 
-// Helper to render trimmed PDF texture on dynamic canvas
+// Proportional texture cropper & renderer
 function TrimmedImageTexture({ doc }: { doc: LoadedPdfDocument }) {
   const [trimmedUrl, setTrimmedUrl] = useState<string>(doc.frontImageUrl);
 
@@ -78,60 +79,59 @@ function TrimmedImageTexture({ doc }: { doc: LoadedPdfDocument }) {
     img.src = doc.frontImageUrl;
 
     img.onload = () => {
-      const fullWidthInches = doc.fullWidth || (doc.widthPt / 72);
-      const fullHeightInches = doc.fullHeight || (doc.heightPt / 72);
-      const marginX = doc.trimMarginX || 0;
-      const marginY = doc.trimMarginY || 0;
+      const fullW = doc.fullWidth || (doc.widthPt / 72);
+      const fullH = doc.fullHeight || (doc.heightPt / 72);
+      const mX = doc.trimMarginX || 0;
+      const mY = doc.trimMarginY || 0;
 
-      const scaleX = img.naturalWidth / fullWidthInches;
-      const scaleY = img.naturalHeight / fullHeightInches;
+      const cleanW = Math.max(0.1, fullW - 2 * mX);
+      const cleanH = Math.max(0.1, fullH - 2 * mY);
 
-      let srcX = marginX * scaleX;
-      let srcY = marginY * scaleY;
-      let srcW = (fullWidthInches - 2 * marginX) * scaleX;
-      let srcH = (fullHeightInches - 2 * marginY) * scaleY;
+      let cropX = mX;
+      let cropY = mY;
+      let cropW = cleanW;
+      let cropH = cleanH;
 
       if (doc.componentType === 'remit_6_5') {
-        const panelHeightInches = 3.3641;
-        srcH = panelHeightInches * scaleY;
-        srcY = marginY * scaleY;
+        cropW = 6.25;
+        cropH = 3.3641;
       } else if (doc.componentType === 'letter' && doc.selectedPanel && doc.selectedPanel !== 'none') {
-        const fullCleanHeight = fullHeightInches - 2 * marginY;
-        const panelHeightInches = fullCleanHeight / 3;
-        srcH = panelHeightInches * scaleY;
-
-        if (doc.selectedPanel === 'top') {
-          srcY = marginY * scaleY;
-        } else if (doc.selectedPanel === 'middle') {
-          srcY = (marginY + panelHeightInches) * scaleY;
-        } else if (doc.selectedPanel === 'bottom') {
-          srcY = (marginY + panelHeightInches * 2) * scaleY;
-        }
+        const panelH = cleanH / 3;
+        cropH = panelH;
+        if (doc.selectedPanel === 'top') cropY = mY;
+        else if (doc.selectedPanel === 'middle') cropY = mY + panelH;
+        else if (doc.selectedPanel === 'bottom') cropY = mY + panelH * 2;
       } else if (doc.componentType === 'letter_bifold' && doc.selectedPanel && doc.selectedPanel !== 'none') {
-        const fullCleanHeight = fullHeightInches - 2 * marginY;
-        const panelHeightInches = fullCleanHeight / 2;
-        srcH = panelHeightInches * scaleY;
-
-        if (doc.selectedPanel === 'half_top') {
-          srcY = marginY * scaleY;
-        } else if (doc.selectedPanel === 'half_bottom') {
-          srcY = (marginY + panelHeightInches) * scaleY;
-        }
+        const panelH = cleanH / 2;
+        cropH = panelH;
+        if (doc.selectedPanel === 'half_top') cropY = mY;
+        else if (doc.selectedPanel === 'half_bottom') cropY = mY + panelH;
       }
+
+      // Convert inches to exact pixel space based on natural image resolution
+      const pxPerInchX = img.naturalWidth / fullW;
+      const pxPerInchY = img.naturalHeight / fullH;
+
+      const srcX = cropX * pxPerInchX;
+      const srcY = cropY * pxPerInchY;
+      const srcW = cropW * pxPerInchX;
+      const srcH = cropH * pxPerInchY;
 
       const rotation = doc.rotation || 0;
       const is90or270 = rotation === 90 || rotation === 270;
 
-      const cropW = Math.max(1, Math.round(srcW));
-      const cropH = Math.max(1, Math.round(srcH));
+      const renderW = Math.max(1, Math.round(srcW));
+      const renderH = Math.max(1, Math.round(srcH));
 
       const canvas = document.createElement('canvas');
-      canvas.width = is90or270 ? cropH : cropW;
-      canvas.height = is90or270 ? cropW : cropH;
+      canvas.width = is90or270 ? renderH : renderW;
+      canvas.height = is90or270 ? renderW : renderH;
 
       const ctx = canvas.getContext('2d');
 
       if (ctx) {
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
         ctx.save();
         ctx.translate(canvas.width / 2, canvas.height / 2);
         ctx.rotate((rotation * Math.PI) / 180);
@@ -139,7 +139,7 @@ function TrimmedImageTexture({ doc }: { doc: LoadedPdfDocument }) {
         ctx.drawImage(
           img,
           srcX, srcY, srcW, srcH,
-          -cropW / 2, -cropH / 2, cropW, cropH
+          -renderW / 2, -renderH / 2, renderW, renderH
         );
 
         ctx.restore();
@@ -163,7 +163,7 @@ function TrimmedImageTexture({ doc }: { doc: LoadedPdfDocument }) {
     <img
       src={trimmedUrl}
       alt={`${doc.name} (Front)`}
-      style={{ width: '100%', height: '100%', objectFit: 'fill', display: 'block' }}
+      style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
     />
   );
 }
@@ -256,7 +256,7 @@ export function StaircaseView({ documents, onRemoveDocument, stageRef, stackRef 
       const finalScale = Math.min(Math.min(scaleX, scaleY), 1.0);
 
       gsap.to(activeStackRef.current, {
-        scale: Math.max(finalScale, 0.25),
+        scale: Math.max(finalScale, 0.35),
         transformOrigin: 'top left',
         duration: 0.4,
         ease: 'power2.out',
@@ -527,6 +527,7 @@ export function StaircaseView({ documents, onRemoveDocument, stageRef, stackRef 
                   if ((e.target as HTMLElement).classList.contains('remove-btn')) return;
                   handleCardClick(doc.id);
                 }}
+                className="stacked-card"
                 style={{
                   position: 'absolute',
                   top: 0,
@@ -539,41 +540,43 @@ export function StaircaseView({ documents, onRemoveDocument, stageRef, stackRef 
                   cursor: 'pointer',
                 }}
               >
-                {/* Surface Badge */}
-                <div style={{ position: 'absolute', top: '8px', left: '8px', zIndex: 10, pointerEvents: 'none' }}>
-                  <div
-                    style={{
-                      display: 'table',
-                      height: '20px',
-                      backgroundColor: '#0066ff',
-                      borderRadius: '4px',
-                      padding: '0 8px',
-                      boxSizing: 'border-box',
-                    }}
-                  >
-                    <span
-                      style={{
-                        display: 'table-cell',
-                        verticalAlign: 'top',
-                        paddingTop: '3px',
-                        color: '#ffffff',
-                        fontSize: '11px',
-                        fontWeight: 800,
-                        whiteSpace: 'nowrap',
-                        lineHeight: 1,
-                      }}
-                    >
-                      #{idx + 1}
-                    </span>
-                  </div>
-                </div>
-
                 {/* 3D Wrapper Hierarchy */}
                 <div className="stacked-card__inner-wrapper" style={{ position: 'relative', width: '100%', height: '100%', transformStyle: 'preserve-3d' }}>
                   <div className="stacked-card__inner" style={{ position: 'relative', width: '100%', height: '100%', transformStyle: 'preserve-3d', transition: 'transform 0.6s cubic-bezier(0.4, 0, 0.2, 1)' }}>
                     
                     {/* Front Face with Trim & Crop Logic Applied */}
                     <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', backfaceVisibility: 'hidden', background: '#fff', boxShadow: '0 10px 25px rgba(0,0,0,0.15)', overflow: 'hidden', zIndex: 2 }}>
+                      
+                      {/* Surface Badge Overlay */}
+                      <div style={{ position: 'absolute', top: '8px', left: '8px', zIndex: 20, pointerEvents: 'none' }}>
+                        <div
+                          style={{
+                            display: 'table',
+                            height: '22px',
+                            backgroundColor: '#0066ff',
+                            borderRadius: '4px',
+                            padding: '0 8px',
+                            boxSizing: 'border-box',
+                            boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+                          }}
+                        >
+                          <span
+                            style={{
+                              display: 'table-cell',
+                              verticalAlign: 'top',
+                              paddingTop: '3px',
+                              color: '#ffffff',
+                              fontSize: '11px',
+                              fontWeight: 800,
+                              whiteSpace: 'nowrap',
+                              lineHeight: 1,
+                            }}
+                          >
+                            #{idx + 1}
+                          </span>
+                        </div>
+                      </div>
+
                       <TrimmedImageTexture doc={doc} />
                     </div>
 
