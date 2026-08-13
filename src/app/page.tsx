@@ -468,7 +468,7 @@ export default function DirectMailWorkbench() {
     });
   };
 
-/// // OVERLAY PDF TEMPLATE GENERATOR
+// OVERLAY PDF TEMPLATE GENERATOR
   const handleExportPdf = async () => {
     const capture2dElement = envelopeWrapperRef.current || envelopeRef.current;
     if (!capture2dElement) return;
@@ -697,50 +697,32 @@ export default function DirectMailWorkbench() {
 
       const pdfDoc = await PDFDocument.load(templateArrayBuffer);
       const page = pdfDoc.getPages()[0];
-      const { height: pageHeight } = page.getSize(); // Standard 11" = 792 pt
+      const { height: pageHeight } = page.getSize(); // 11" = 792 pt
 
       const helveticaBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
-      // --- USER METADATA OVERLAYS ---
+      // --- USER METADATA OVERLAYS (14 pt font, no background boxes) ---
 
-      // 1. Recipient Name: X = 3.4955" (251.68 pt), Y = 0.8306" (732.20 pt from bottom)
-      const recipientXPt = 3.4955 * 72; // 251.68 pt
-      const recipientYPt = pageHeight - 0.8306 * 72; // 732.20 pt
-
-      // White overlay box to cover template placeholder text
-      page.drawRectangle({
-        x: recipientXPt,
-        y: recipientYPt - 2,
-        width: 180,
-        height: 12,
-        color: rgb(1, 1, 1),
-      });
+      // 1. Recipient Name: X = 3.4433" (247.92 pt), Y = 0.9963" (720.27 pt from bottom)
+      const recipientXPt = 3.4433 * 72; // 247.92 pt
+      const recipientYPt = pageHeight - 0.9963 * 72; // 720.27 pt
 
       page.drawText(attnName, {
         x: recipientXPt,
         y: recipientYPt,
-        size: 9,
+        size: 14,
         font: helveticaBold,
         color: rgb(0, 0, 0),
       });
 
-      // 2. Job #: X = 4.0329" (290.37 pt), Y = 1.1367" (710.16 pt from bottom)
-      const jobNumXPt = 4.0329 * 72; // 290.37 pt
-      const jobNumYPt = pageHeight - 1.1367 * 72; // 710.16 pt
-
-      // White overlay box to cover template placeholder text
-      page.drawRectangle({
-        x: jobNumXPt,
-        y: jobNumYPt - 2,
-        width: 140,
-        height: 12,
-        color: rgb(1, 1, 1),
-      });
+      // 2. Job #: X = 4.0300" (290.16 pt), Y = 1.3076" (697.85 pt from bottom)
+      const jobNumXPt = 4.03 * 72; // 290.16 pt
+      const jobNumYPt = pageHeight - 1.3076 * 72; // 697.85 pt
 
       page.drawText(jobNumber, {
         x: jobNumXPt,
         y: jobNumYPt,
-        size: 9,
+        size: 14,
         font: helveticaBold,
         color: rgb(0, 0, 0),
       });
