@@ -239,7 +239,7 @@ function DynamicInsertView({
         boxShadow: '0 2px 4px rgba(0,0,0,0.08)',
       }}
     >
-{/* 2D UNIFIED BLUE BADGE (TABLE-CELL ALIGNMENT FOR HTML2CANVAS) */}
+{/* 2D UNIFIED BLUE BADGE (TOP ALIGNED WITH PADDING FOR CANVAS) */}
       <div
         style={{
           position: 'absolute',
@@ -259,7 +259,8 @@ function DynamicInsertView({
         <span
           style={{
             display: 'table-cell',
-            verticalAlign: 'middle',
+            verticalAlign: 'top',
+            paddingTop: '2px',
             color: '#ffffff',
             fontSize: '10px',
             fontWeight: 700,

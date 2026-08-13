@@ -432,7 +432,7 @@ export function StaircaseView({ documents, onRemoveDocument, stageRef, stackRef 
                 }}
               >
 
-{/* Surface Badge (TABLE-CELL ALIGNMENT FOR HTML2CANVAS) */}
+{/* Surface Badge (TOP ALIGNED WITH PADDING FOR CANVAS) */}
                 <div style={{ position: 'absolute', top: '8px', left: '8px', zIndex: 10, pointerEvents: 'none' }}>
                   <div
                     style={{
@@ -447,7 +447,8 @@ export function StaircaseView({ documents, onRemoveDocument, stageRef, stackRef 
                     <span
                       style={{
                         display: 'table-cell',
-                        verticalAlign: 'middle',
+                        verticalAlign: 'top',
+                        paddingTop: '3px',
                         color: '#ffffff',
                         fontSize: '11px',
                         fontWeight: 800,
