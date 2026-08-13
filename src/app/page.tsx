@@ -451,7 +451,7 @@ export default function DirectMailWorkbench() {
     });
   };
 
-  // OVERLAY PDF TEMPLATE GENERATOR
+// OVERLAY PDF TEMPLATE GENERATOR
   const handleExportPdf = async () => {
     const capture2dElement = envelopeWrapperRef.current || envelopeRef.current;
     if (!capture2dElement) return;
@@ -467,7 +467,7 @@ export default function DirectMailWorkbench() {
       const targetRatio = 7.7968 / 3.9473;
 
       // -------------------------------------------------------------
-      // 1. CAPTURE & CROP 2D VIEWPORT (TRIM EXTRA SCREEN WHITESPACE)
+      // 1. CAPTURE & CROP 2D VIEWPORT
       // -------------------------------------------------------------
       const scaleFactor2d = 3;
       const fullCanvas2d = await html2canvas(capture2dElement, {
@@ -488,7 +488,6 @@ export default function DirectMailWorkbench() {
         let maxX = envelopeRect.right;
         let maxY = envelopeRect.bottom;
 
-        // Expand bounding box to cover staggered/fanned-out inserts
         const childElements = envelopeRef.current.querySelectorAll('*');
         childElements.forEach((el) => {
           const r = el.getBoundingClientRect();
@@ -546,7 +545,7 @@ export default function DirectMailWorkbench() {
       }
 
       // -------------------------------------------------------------
-      // 2. CAPTURE & CROP 3D VIEWPORT (MATCH ASPECT RATIO TO CYAN BOX)
+      // 2. CAPTURE & CROP 3D VIEWPORT (SUPER HIGH-RES RENDER)
       // -------------------------------------------------------------
       let img3dData: string | null = null;
       const container3d = staircaseContainerRef.current;
@@ -556,20 +555,25 @@ export default function DirectMailWorkbench() {
       if (container3d && stage3d) {
         const originalDisplay = container3d.style.display;
         const originalPosition = container3d.style.position;
+        const originalWidth = container3d.style.width;
+        const originalHeight = container3d.style.height;
 
-        if (viewMode === '2d') {
-          container3d.style.display = 'flex';
-          container3d.style.position = 'fixed';
-          container3d.style.top = '-9999px';
-          container3d.style.left = '-9999px';
-          container3d.style.width = '1200px';
-          container3d.style.height = '800px';
-        }
+        // Force a large hi-res rendering viewport off-screen (2400px x 1600px)
+        container3d.style.display = 'flex';
+        container3d.style.position = 'fixed';
+        container3d.style.top = '-9999px';
+        container3d.style.left = '-9999px';
+        container3d.style.width = '2400px';
+        container3d.style.height = '1600px';
 
-        await new Promise((resolve) => setTimeout(resolve, 250));
+        // Trigger resize so GSAP auto-fits card stack crisp & large inside 2400px canvas
+        window.dispatchEvent(new Event('resize'));
+
+        // Allow layout calculation and GSAP placement to settle
+        await new Promise((resolve) => setTimeout(resolve, 350));
 
         try {
-          const scaleFactor3d = 3;
+          const scaleFactor3d = 3; // Yields a crisp ~7200px image buffer
           const fullCanvas3d = await html2canvas(stage3d, {
             scale: scaleFactor3d,
             useCORS: true,
@@ -581,7 +585,7 @@ export default function DirectMailWorkbench() {
             const stageRect = stage3d.getBoundingClientRect();
             const stackRect = stack3d.getBoundingClientRect();
 
-            const paddingPx = 30;
+            const paddingPx = 60; // Expanded padding buffer for high-res viewport
             const stackCenterX = (stackRect.left + stackRect.right) / 2 - stageRect.left;
             const stackCenterY = (stackRect.top + stackRect.bottom) / 2 - stageRect.top;
 
@@ -611,6 +615,8 @@ export default function DirectMailWorkbench() {
             const ctx3d = croppedCanvas3d.getContext('2d');
 
             if (ctx3d) {
+              ctx3d.imageSmoothingEnabled = true;
+              ctx3d.imageSmoothingQuality = 'high';
               ctx3d.drawImage(
                 fullCanvas3d,
                 cropX * scaleFactor3d,
@@ -632,14 +638,14 @@ export default function DirectMailWorkbench() {
         } catch (captureErr) {
           console.warn('3D stage capture failed:', captureErr);
         } finally {
-          if (viewMode === '2d') {
-            container3d.style.display = originalDisplay;
-            container3d.style.position = originalPosition;
-            container3d.style.top = '';
-            container3d.style.left = '';
-            container3d.style.width = '100%';
-            container3d.style.height = '100%';
-          }
+          // Restore 3D container styles & trigger layout update
+          container3d.style.display = originalDisplay;
+          container3d.style.position = originalPosition;
+          container3d.style.top = '';
+          container3d.style.left = '';
+          container3d.style.width = originalWidth || '100%';
+          container3d.style.height = originalHeight || '100%';
+          window.dispatchEvent(new Event('resize'));
         }
       }
 
@@ -692,7 +698,7 @@ export default function DirectMailWorkbench() {
         3.9473 * 72
       );
 
-      // Draw 3D View inside Cyan Container (#00aeef)
+      // Draw High-Res 3D View inside Cyan Container (#00aeef)
       if (img3dData) {
         await drawImageInBoxProportional(
           img3dData,
