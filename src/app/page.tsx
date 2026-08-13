@@ -545,12 +545,11 @@ export default function DirectMailWorkbench() {
       }
 
       // -------------------------------------------------------------
-      // 2. CAPTURE & CROP 3D VIEWPORT (SUPER HIGH-RES RENDER)
+      // 2. CAPTURE & CROP 3D VIEWPORT (HIGH-RES + UNION CARDS BOUNDING BOX)
       // -------------------------------------------------------------
       let img3dData: string | null = null;
       const container3d = staircaseContainerRef.current;
       const stage3d = staircaseStageRef.current || container3d;
-      const stack3d = staircaseStackRef.current;
 
       if (container3d && stage3d) {
         const originalDisplay = container3d.style.display;
@@ -558,7 +557,7 @@ export default function DirectMailWorkbench() {
         const originalWidth = container3d.style.width;
         const originalHeight = container3d.style.height;
 
-        // Force a large hi-res rendering viewport off-screen (2400px x 1600px)
+        // Force hi-res viewport off-screen (2400px x 1600px)
         container3d.style.display = 'flex';
         container3d.style.position = 'fixed';
         container3d.style.top = '-9999px';
@@ -566,14 +565,14 @@ export default function DirectMailWorkbench() {
         container3d.style.width = '2400px';
         container3d.style.height = '1600px';
 
-        // Trigger resize so GSAP auto-fits card stack crisp & large inside 2400px canvas
+        // Trigger resize for GSAP auto-fit calculation
         window.dispatchEvent(new Event('resize'));
 
-        // Allow layout calculation and GSAP placement to settle
-        await new Promise((resolve) => setTimeout(resolve, 350));
+        // Wait 600ms for GSAP animations (0.4s) and DOM layout to fully settle
+        await new Promise((resolve) => setTimeout(resolve, 600));
 
         try {
-          const scaleFactor3d = 3; // Yields a crisp ~7200px image buffer
+          const scaleFactor3d = 3;
           const fullCanvas3d = await html2canvas(stage3d, {
             scale: scaleFactor3d,
             useCORS: true,
@@ -581,19 +580,41 @@ export default function DirectMailWorkbench() {
             backgroundColor: '#e8e6e7',
           });
 
-          if (stack3d) {
+          // Measure true union bounding box across ALL rendered 3D cards
+          const cardElements = stage3d.querySelectorAll('.stacked-card, [class*="stacked-card"]');
+          let minX = Infinity;
+          let minY = Infinity;
+          let maxX = -Infinity;
+          let maxY = -Infinity;
+
+          cardElements.forEach((card) => {
+            const r = card.getBoundingClientRect();
+            if (r.width > 0 && r.height > 0) {
+              if (r.left < minX) minX = r.left;
+              if (r.top < minY) minY = r.top;
+              if (r.right > maxX) maxX = r.right;
+              if (r.bottom > maxY) maxY = r.bottom;
+            }
+          });
+
+          if (minX !== Infinity && cardElements.length > 0) {
             const stageRect = stage3d.getBoundingClientRect();
-            const stackRect = stack3d.getBoundingClientRect();
 
-            const paddingPx = 60; // Expanded padding buffer for high-res viewport
-            const stackCenterX = (stackRect.left + stackRect.right) / 2 - stageRect.left;
-            const stackCenterY = (stackRect.top + stackRect.bottom) / 2 - stageRect.top;
+            const contentLeft = minX - stageRect.left;
+            const contentTop = minY - stageRect.top;
+            const contentRight = maxX - stageRect.left;
+            const contentBottom = maxY - stageRect.top;
 
-            const neededW = stackRect.width + paddingPx * 2;
-            const neededH = stackRect.height + paddingPx * 2;
+            const contentW = contentRight - contentLeft;
+            const contentH = contentBottom - contentTop;
 
-            let cropW = neededW;
-            let cropH = neededH;
+            const contentCenterX = (contentLeft + contentRight) / 2;
+            const contentCenterY = (contentTop + contentBottom) / 2;
+
+            const paddingPx = 50;
+
+            let cropW = contentW + paddingPx * 2;
+            let cropH = contentH + paddingPx * 2;
 
             if (cropW / cropH < targetRatio) {
               cropW = cropH * targetRatio;
@@ -601,13 +622,18 @@ export default function DirectMailWorkbench() {
               cropH = cropW / targetRatio;
             }
 
-            let cropX = Math.max(0, stackCenterX - cropW / 2);
-            let cropY = Math.max(0, stackCenterY - cropH / 2);
+            let cropX = contentCenterX - cropW / 2;
+            let cropY = contentCenterY - cropH / 2;
 
-            if (cropX + cropW > stageRect.width) cropX = Math.max(0, stageRect.width - cropW);
-            if (cropY + cropH > stageRect.height) cropY = Math.max(0, stageRect.height - cropH);
-            cropW = Math.min(stageRect.width - cropX, cropW);
-            cropH = Math.min(stageRect.height - cropY, cropH);
+            if (cropX < 0) cropX = 0;
+            if (cropY < 0) cropY = 0;
+            if (cropX + cropW > stageRect.width) cropX = stageRect.width - cropW;
+            if (cropY + cropH > stageRect.height) cropY = stageRect.height - cropH;
+
+            cropW = Math.min(stageRect.width - Math.max(0, cropX), cropW);
+            cropH = Math.min(stageRect.height - Math.max(0, cropY), cropH);
+            cropX = Math.max(0, cropX);
+            cropY = Math.max(0, cropY);
 
             const croppedCanvas3d = document.createElement('canvas');
             croppedCanvas3d.width = cropW * scaleFactor3d;
@@ -638,7 +664,6 @@ export default function DirectMailWorkbench() {
         } catch (captureErr) {
           console.warn('3D stage capture failed:', captureErr);
         } finally {
-          // Restore 3D container styles & trigger layout update
           container3d.style.display = originalDisplay;
           container3d.style.position = originalPosition;
           container3d.style.top = '';
