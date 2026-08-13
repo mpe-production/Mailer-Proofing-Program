@@ -29,7 +29,7 @@ export interface StaircaseViewProps {
   stackRef?: React.RefObject<HTMLDivElement | null>;
 }
 
-const PX_PER_INCH = 24;
+const PX_PER_INCH = 96;
 
 function classifyPdfFormat(widthPt: number, heightPt: number) {
   const widthInches = widthPt / 72;
