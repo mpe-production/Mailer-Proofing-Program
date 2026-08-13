@@ -449,7 +449,7 @@ export default function DirectMailWorkbench() {
     });
   };
 
-  // OVERLAY PDF TEMPLATE GENERATOR
+// OVERLAY PDF TEMPLATE GENERATOR
   const handleExportPdf = async () => {
     if (!envelopeRef.current) return;
     setIsExporting(true);
@@ -457,7 +457,8 @@ export default function DirectMailWorkbench() {
     const currentSelection = selectedInsertId;
     setSelectedInsertId(null);
 
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    // Wait for selection outlines to disappear
+    await new Promise((resolve) => setTimeout(resolve, 150));
 
     try {
       // 1. Capture 2D Viewport Canvas
@@ -468,23 +469,60 @@ export default function DirectMailWorkbench() {
       });
       const img2dData = canvas2d.toDataURL('image/png');
 
-      // 2. Capture 3D Viewport Canvas
+      // 2. Capture 3D Viewport Canvas safely
       let img3dData: string | null = null;
-      if (staircaseContainerRef.current) {
-        img3dData = await htmlToImage.toPng(staircaseContainerRef.current, {
-          quality: 1.0,
-          pixelRatio: 2,
-          backgroundColor: '#e8e6e7',
-        });
+      
+      // Temporarily reveal 3D container off-screen if user is in 2D mode
+      const container3d = staircaseContainerRef.current;
+      if (container3d) {
+        const originalDisplay = container3d.style.display;
+        const originalPosition = container3d.style.position;
+        const originalVisibility = container3d.style.visibility;
+
+        if (viewMode === '2d') {
+          container3d.style.display = 'flex';
+          container3d.style.position = 'fixed';
+          container3d.style.top = '-9999px';
+          container3d.style.left = '-9999px';
+          container3d.style.width = '1200px';
+          container3d.style.height = '800px';
+        }
+
+        // Allow layout calculation
+        await new Promise((resolve) => setTimeout(resolve, 100));
+
+        try {
+          img3dData = await htmlToImage.toPng(container3d, {
+            quality: 0.95,
+            pixelRatio: 2,
+            backgroundColor: '#e8e6e7',
+          });
+        } catch (captureErr) {
+          console.warn('3D snapshot capture skipped or failed:', captureErr);
+        } finally {
+          // Restore container layout
+          if (viewMode === '2d') {
+            container3d.style.display = originalDisplay;
+            container3d.style.position = originalPosition;
+            container3d.style.visibility = originalVisibility;
+            container3d.style.top = '';
+            container3d.style.left = '';
+            container3d.style.width = '100%';
+            container3d.style.height = '100%';
+          }
+        }
       }
 
-      // 3. Load PDF Template
-      const templateArrayBuffer = await fetch('/templates/mailer-sequence-proof-template.pdf').then((res) =>
-        res.arrayBuffer()
-      );
+      // 3. Fetch PDF Template
+      const templateRes = await fetch('/templates/mailer-sequence-proof-template.pdf');
+      if (!templateRes.ok) {
+        throw new Error(`Template PDF not found at /templates/mailer-sequence-proof-template.pdf (Status ${templateRes.status})`);
+      }
+      const templateArrayBuffer = await templateRes.arrayBuffer();
+      
       const pdfDoc = await PDFDocument.load(templateArrayBuffer);
       const page = pdfDoc.getPages()[0];
-      const { height: pageHeight } = page.getSize(); // Standard 11" = 792 pt
+      const { height: pageHeight } = page.getSize();
 
       // 4. Helper to draw image aspect-ratio contained inside box bounds
       const drawImageInBox = async (
@@ -503,7 +541,6 @@ export default function DirectMailWorkbench() {
         const drawH = imgH * scale;
 
         const offsetX = boxXPt + (boxWPt - drawW) / 2;
-        // pdf-lib measures Y from bottom-left corner
         const pdfYBottom = pageHeight - boxTopYPt - boxHPt;
         const offsetY = pdfYBottom + (boxHPt - drawH) / 2;
 
@@ -515,38 +552,41 @@ export default function DirectMailWorkbench() {
         });
       };
 
-      // 5. Draw 2D View inside Magenta Container (0.3575", 2.5342", 7.7968", 3.9473")
+      // 5. Draw 2D View inside Magenta Container (#ec008c)
       await drawImageInBox(
         img2dData,
-        0.3575 * 72, // 25.74 pt
-        2.5342 * 72, // 182.46 pt
-        7.7968 * 72, // 561.37 pt
-        3.9473 * 72  // 284.21 pt
+        0.3575 * 72,
+        2.5342 * 72,
+        7.7968 * 72,
+        3.9473 * 72
       );
 
-      // 6. Draw 3D View inside Cyan Container (0.3575", 6.7315", 7.7968", 3.9473")
+      // 6. Draw 3D View inside Cyan Container (#00aeef)
       if (img3dData) {
         await drawImageInBox(
           img3dData,
-          0.3575 * 72, // 25.74 pt
-          6.7315 * 72, // 484.67 pt
-          7.7968 * 72, // 561.37 pt
-          3.9473 * 72  // 284.21 pt
+          0.3575 * 72,
+          6.7315 * 72,
+          7.7968 * 72,
+          3.9473 * 72
         );
       }
 
-      // 7. Generate PDF Download
+      // 7. Save and Trigger Download
       const pdfBytes = await pdfDoc.save();
       const blob = new Blob([pdfBytes.buffer as ArrayBuffer], { type: 'application/pdf' });
       const downloadUrl = URL.createObjectURL(blob);
 
-      const a = document.createElement('a');
-      a.href = downloadUrl;
-      a.download = `mailer-sequence-proof-${Date.now()}.pdf`;
-      a.click();
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = `mailer-sequence-proof-${Date.now()}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
       URL.revokeObjectURL(downloadUrl);
     } catch (err) {
       console.error('Failed to generate template PDF:', err);
+      alert(`PDF Export Failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
     } finally {
       setSelectedInsertId(currentSelection);
       setIsExporting(false);
