@@ -431,12 +431,26 @@ export function StaircaseView({ documents, onRemoveDocument, stageRef, stackRef 
                   cursor: 'pointer',
                 }}
               >
-                {/* Surface Badge */}
-                <div style={{ position: 'absolute', top: '8px', left: '8px', zIndex: 10, pointerEvents: 'none' }}>
-                  <span style={{ backgroundColor: '#0066ff', color: '#ffffff', fontSize: '11px', fontWeight: 800, padding: '3px 7px', borderRadius: '4px' }}>
-                    #{idx + 1}
-                  </span>
-                </div>
+                
+{/* Surface Badge */}
+<div style={{ position: 'absolute', top: '8px', left: '8px', zIndex: 10, pointerEvents: 'none' }}>
+  <span
+    style={{
+      backgroundColor: '#0066ff',
+      color: '#ffffff',
+      fontSize: '11px',
+      fontWeight: 800,
+      padding: '4px 8px',
+      borderRadius: '4px',
+      display: 'inline-flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      lineHeight: 1,
+    }}
+  >
+    #{idx + 1}
+  </span>
+</div>
 
                 {/* 3D Wrapper Hierarchy */}
                 <div className="stacked-card__inner-wrapper" style={{ position: 'relative', width: '100%', height: '100%', transformStyle: 'preserve-3d' }}>

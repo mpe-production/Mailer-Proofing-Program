@@ -239,23 +239,27 @@ function DynamicInsertView({
         boxShadow: '0 2px 4px rgba(0,0,0,0.08)',
       }}
     >
+      {/* 2D UNIFIED BLUE BADGE */}
       <div
         style={{
           position: 'absolute',
           top: '4px',
           left: '4px',
-          backgroundColor: isSelected ? '#2563eb' : 'rgba(15, 23, 42, 0.82)',
+          backgroundColor: '#0066ff',
           color: '#ffffff',
           fontSize: '0.60rem',
           fontWeight: 700,
           letterSpacing: '0.03em',
-          padding: '2px 6px',
+          padding: '3px 6px',
           borderRadius: '3px',
           zIndex: 10,
           pointerEvents: 'none',
           boxShadow: '0 1px 2px rgba(0,0,0,0.2)',
           textTransform: 'uppercase',
-          backdropFilter: 'blur(2px)',
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          lineHeight: 1,
         }}
       >
         {getLabelText()}
