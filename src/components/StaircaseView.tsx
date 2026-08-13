@@ -19,6 +19,7 @@ export interface LoadedPdfDocument {
 export interface StaircaseViewProps {
   documents: LoadedPdfDocument[];
   onRemoveDocument?: (id: string) => void;
+  stageRef?: React.RefObject<HTMLDivElement | null>;
 }
 
 const PX_PER_INCH = 24;
@@ -58,12 +59,14 @@ function classifyPdfFormat(widthPt: number, heightPt: number) {
   };
 }
 
-export function StaircaseView({ documents, onRemoveDocument }: StaircaseViewProps) {
+export function StaircaseView({ documents, onRemoveDocument, stageRef }: StaircaseViewProps) {
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
   const [flippedCards, setFlippedCards] = useState<Record<string, boolean>>({});
   const [isExporting, setIsExporting] = useState<boolean>(false);
 
-  const stageViewportRef = useRef<HTMLDivElement | null>(null);
+  const internalStageViewportRef = useRef<HTMLDivElement | null>(null);
+  const activeStageRef = stageRef || internalStageViewportRef;
+
   const stackContainerRef = useRef<HTMLDivElement | null>(null);
   const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
@@ -121,9 +124,9 @@ export function StaircaseView({ documents, onRemoveDocument }: StaircaseViewProp
     });
 
     // Auto-fit scale to keep all cards within stage view
-    if (stageViewportRef.current) {
-      const availableWidth = stageViewportRef.current.clientWidth - 80;
-      const availableHeight = stageViewportRef.current.clientHeight - 80;
+    if (activeStageRef.current) {
+      const availableWidth = activeStageRef.current.clientWidth - 80;
+      const availableHeight = activeStageRef.current.clientHeight - 80;
 
       let maxCardWidth = 0;
       let maxCardHeight = 0;
@@ -254,11 +257,11 @@ export function StaircaseView({ documents, onRemoveDocument }: StaircaseViewProp
   };
 
   const handleExportPng = async () => {
-    if (!stageViewportRef.current) return;
+    if (!activeStageRef.current) return;
     setIsExporting(true);
 
     try {
-      const dataUrl = await htmlToImage.toPng(stageViewportRef.current, {
+      const dataUrl = await htmlToImage.toPng(activeStageRef.current, {
         quality: 1.0,
         pixelRatio: 2,
         backgroundColor: '#e8e6e7',
@@ -378,8 +381,18 @@ export function StaircaseView({ documents, onRemoveDocument }: StaircaseViewProp
         </div>
       </aside>
 
-      {/* RIGHT STAGE: 3D STAIRCASE VIEWPORT */}
-      <main ref={stageViewportRef} style={{ flex: 1, position: 'relative', perspective: '1200px', padding: '40px', overflow: 'auto' }}>
+      {/* RIGHT STAGE: 3D STAIRCASE VIEWPORT (ATTACHED TO ACTIVE STAGE REF) */}
+      <main
+        ref={activeStageRef}
+        style={{
+          flex: 1,
+          position: 'relative',
+          perspective: '1200px',
+          padding: '40px',
+          overflow: 'auto',
+          backgroundColor: '#e8e6e7',
+        }}
+      >
         {documents.length === 0 && (
           <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', color: '#777', fontSize: '16px', textAlign: 'center' }}>
             Upload PDF files in the 2D Workbench to view them in the 3D Staircase stack.

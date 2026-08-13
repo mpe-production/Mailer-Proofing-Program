@@ -303,6 +303,7 @@ export default function DirectMailWorkbench() {
   const envelopeRef = useRef<HTMLDivElement>(null);
   const envelopeWrapperRef = useRef<HTMLDivElement>(null);
   const staircaseContainerRef = useRef<HTMLDivElement>(null);
+  const staircaseStageRef = useRef<HTMLDivElement>(null);
 
   const activeInsertIndex = inserts.findIndex((i) => i.id === selectedInsertId);
   const activeInsert = inserts[activeInsertIndex];
@@ -450,9 +451,8 @@ export default function DirectMailWorkbench() {
     });
   };
 
-// OVERLAY PDF TEMPLATE GENERATOR
+  // OVERLAY PDF TEMPLATE GENERATOR
   const handleExportPdf = async () => {
-    // Target the outer wrapper if available to capture overflow/staggered elements
     const capture2dElement = envelopeWrapperRef.current || envelopeRef.current;
     if (!capture2dElement) return;
     setIsExporting(true);
@@ -460,28 +460,27 @@ export default function DirectMailWorkbench() {
     const currentSelection = selectedInsertId;
     setSelectedInsertId(null);
 
-    // Short delay to clear selection dashed borders
     await new Promise((resolve) => setTimeout(resolve, 150));
 
     try {
-      // 1. Capture 2D Viewport Canvas (including staggered overflow)
+      // 1. Capture 2D Viewport Canvas
       const canvas2d = await html2canvas(capture2dElement, {
         scale: 3,
         useCORS: true,
         allowTaint: true,
-        backgroundColor: null, // Transparent background so padding looks natural
+        backgroundColor: null,
       });
       const img2dData = canvas2d.toDataURL('image/png');
 
-      // 2. Capture 3D Viewport Canvas
+      // 2. Capture 3D Stage area (excluding sidebar)
       let img3dData: string | null = null;
       const container3d = staircaseContainerRef.current;
+      const stage3d = staircaseStageRef.current || container3d;
 
-      if (container3d) {
+      if (container3d && stage3d) {
         const originalDisplay = container3d.style.display;
         const originalPosition = container3d.style.position;
 
-        // Temporarily reveal 3D container off-screen if currently in 2D view mode
         if (viewMode === '2d') {
           container3d.style.display = 'flex';
           container3d.style.position = 'fixed';
@@ -491,11 +490,10 @@ export default function DirectMailWorkbench() {
           container3d.style.height = '800px';
         }
 
-        // Wait for GSAP/DOM layout to calculate
         await new Promise((resolve) => setTimeout(resolve, 250));
 
         try {
-          const canvas3d = await html2canvas(container3d, {
+          const canvas3d = await html2canvas(stage3d, {
             scale: 2,
             useCORS: true,
             allowTaint: true,
@@ -503,9 +501,8 @@ export default function DirectMailWorkbench() {
           });
           img3dData = canvas3d.toDataURL('image/png');
         } catch (captureErr) {
-          console.warn('3D snapshot capture failed:', captureErr);
+          console.warn('3D stage capture failed:', captureErr);
         } finally {
-          // Restore container state
           if (viewMode === '2d') {
             container3d.style.display = originalDisplay;
             container3d.style.position = originalPosition;
@@ -526,22 +523,21 @@ export default function DirectMailWorkbench() {
 
       const pdfDoc = await PDFDocument.load(templateArrayBuffer);
       const page = pdfDoc.getPages()[0];
-      const { height: pageHeight } = page.getSize(); // 792 pt
+      const { height: pageHeight } = page.getSize();
 
-      // 4. Helper to draw image inside box bounds WITH PADDING BUFFER
+      // 4. Helper to draw image inside box bounds with adjustable padding
       const drawImageInBox = async (
         dataUrl: string,
         boxXPt: number,
         boxTopYPt: number,
         boxWPt: number,
         boxHPt: number,
-        paddingFactor = 0.88 // 88% scale = 6% padding on each side
+        paddingFactor = 0.98
       ) => {
         const image = await pdfDoc.embedPng(dataUrl);
         const imgW = image.width;
         const imgH = image.height;
 
-        // Calculate padded container bounds
         const paddedBoxW = boxWPt * paddingFactor;
         const paddedBoxH = boxHPt * paddingFactor;
 
@@ -549,7 +545,6 @@ export default function DirectMailWorkbench() {
         const drawW = imgW * scale;
         const drawH = imgH * scale;
 
-        // Center within box
         const offsetX = boxXPt + (boxWPt - drawW) / 2;
         const pdfYBottom = pageHeight - boxTopYPt - boxHPt;
         const offsetY = pdfYBottom + (boxHPt - drawH) / 2;
@@ -562,29 +557,29 @@ export default function DirectMailWorkbench() {
         });
       };
 
-      // 5. Draw 2D View inside Magenta Container (#ec008c)
+      // 5. Draw 2D View inside Magenta Container (#ec008c) - 0.98 factor for larger scaling
       await drawImageInBox(
         img2dData,
-        0.3575 * 72, // X: 25.74 pt
-        2.5342 * 72, // Y: 182.46 pt
-        7.7968 * 72, // W: 561.37 pt
-        3.9473 * 72, // H: 284.21 pt
-        0.88         // Padding factor
+        0.3575 * 72,
+        2.5342 * 72,
+        7.7968 * 72,
+        3.9473 * 72,
+        0.98
       );
 
-      // 6. Draw 3D View inside Cyan Container (#00aeef)
+      // 6. Draw 3D Stage inside Cyan Container (#00aeef)
       if (img3dData) {
         await drawImageInBox(
           img3dData,
-          0.3575 * 72, // X: 25.74 pt
-          6.7315 * 72, // Y: 484.67 pt
-          7.7968 * 72, // W: 561.37 pt
-          3.9473 * 72, // H: 284.21 pt
-          0.90         // Padding factor
+          0.3575 * 72,
+          6.7315 * 72,
+          7.7968 * 72,
+          3.9473 * 72,
+          0.96
         );
       }
 
-      // 7. Save and Trigger Download
+      // 7. Save & Trigger Download
       const pdfBytes = await pdfDoc.save();
       const blob = new Blob([pdfBytes.buffer as ArrayBuffer], { type: 'application/pdf' });
       const downloadUrl = URL.createObjectURL(blob);
@@ -1095,27 +1090,27 @@ export default function DirectMailWorkbench() {
           <div 
             ref={envelopeWrapperRef}
             style={{ 
-            display: viewMode === '2d' ? 'flex' : 'none', 
-            width: '100%', 
-            height: '100%', 
-            alignItems: 'center', 
-            justifyContent: 'center',
-            padding: '40px', // Ensures staggered inserts outside envelope boundaries are captured
-            overflow: 'visible' 
-        }}
-        >
+              display: viewMode === '2d' ? 'flex' : 'none', 
+              width: '100%', 
+              height: '100%', 
+              alignItems: 'center', 
+              justifyContent: 'center',
+              padding: '12px',
+              overflow: 'visible' 
+            }}
+          >
             <div
-            ref={envelopeRef}
-            style={{
-            width: `${envelopeWidth * ppi}px`,
-            height: `${envelopeHeight * ppi}px`,
-            backgroundColor: '#ffffff',
-            border: '2px solid #334155',
-            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)',
-            position: 'relative',
-            overflow: 'visible', // Allows staggered inserts to display outside bounds
-        }}
-        >
+              ref={envelopeRef}
+              style={{
+                width: `${envelopeWidth * ppi}px`,
+                height: `${envelopeHeight * ppi}px`,
+                backgroundColor: '#ffffff',
+                border: '2px solid #334155',
+                boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)',
+                position: 'relative',
+                overflow: 'visible',
+              }}
+            >
               {showWindow && (
                 <div
                   style={{
@@ -1159,6 +1154,7 @@ export default function DirectMailWorkbench() {
           <div ref={staircaseContainerRef} style={{ display: viewMode === '3d' ? 'flex' : 'none', width: '100%', height: '100%' }}>
             <StaircaseView
               documents={staircaseDocs}
+              stageRef={staircaseStageRef}
               onRemoveDocument={(id) => {
                 setInserts((prev) => prev.filter((item) => item.id !== id));
                 if (selectedInsertId === id) setSelectedInsertId(null);
