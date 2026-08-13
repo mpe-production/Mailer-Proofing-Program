@@ -20,6 +20,7 @@ export interface StaircaseViewProps {
   documents: LoadedPdfDocument[];
   onRemoveDocument?: (id: string) => void;
   stageRef?: React.RefObject<HTMLDivElement | null>;
+  stackRef?: React.RefObject<HTMLDivElement | null>;
 }
 
 const PX_PER_INCH = 24;
@@ -59,7 +60,7 @@ function classifyPdfFormat(widthPt: number, heightPt: number) {
   };
 }
 
-export function StaircaseView({ documents, onRemoveDocument, stageRef }: StaircaseViewProps) {
+export function StaircaseView({ documents, onRemoveDocument, stageRef, stackRef }: StaircaseViewProps) {
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
   const [flippedCards, setFlippedCards] = useState<Record<string, boolean>>({});
   const [isExporting, setIsExporting] = useState<boolean>(false);
@@ -67,12 +68,14 @@ export function StaircaseView({ documents, onRemoveDocument, stageRef }: Stairca
   const internalStageViewportRef = useRef<HTMLDivElement | null>(null);
   const activeStageRef = stageRef || internalStageViewportRef;
 
-  const stackContainerRef = useRef<HTMLDivElement | null>(null);
+  const internalStackContainerRef = useRef<HTMLDivElement | null>(null);
+  const activeStackRef = stackRef || internalStackContainerRef;
+
   const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
   // Positioning & Auto-fit Layout Engine
   const updateStaircasePositions = () => {
-    if (!documents.length || !stackContainerRef.current) return;
+    if (!documents.length || !activeStackRef.current) return;
 
     const total = documents.length;
     const cardGap = 30;
@@ -144,7 +147,7 @@ export function StaircaseView({ documents, onRemoveDocument, stageRef }: Stairca
       const scaleY = availableHeight / totalRenderHeight;
       const finalScale = Math.min(Math.min(scaleX, scaleY), 1.0);
 
-      gsap.to(stackContainerRef.current, {
+      gsap.to(activeStackRef.current, {
         scale: Math.max(finalScale, 0.25),
         transformOrigin: 'top left',
         duration: 0.4,
@@ -381,7 +384,7 @@ export function StaircaseView({ documents, onRemoveDocument, stageRef }: Stairca
         </div>
       </aside>
 
-      {/* RIGHT STAGE: 3D STAIRCASE VIEWPORT (ATTACHED TO ACTIVE STAGE REF) */}
+      {/* RIGHT STAGE: 3D STAIRCASE VIEWPORT */}
       <main
         ref={activeStageRef}
         style={{
@@ -399,7 +402,7 @@ export function StaircaseView({ documents, onRemoveDocument, stageRef }: Stairca
           </div>
         )}
 
-        <div ref={stackContainerRef} style={{ position: 'absolute', top: 0, left: 0, transformOrigin: 'top left' }}>
+        <div ref={activeStackRef} style={{ position: 'absolute', top: 0, left: 0, transformOrigin: 'top left' }}>
           {documents.map((doc, idx) => {
             const formatInfo = classifyPdfFormat(doc.widthPt, doc.heightPt);
 

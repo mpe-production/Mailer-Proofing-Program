@@ -4,7 +4,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import html2canvas from 'html2canvas';
-import * as htmlToImage from 'html-to-image';
 import { PDFDocument } from 'pdf-lib';
 import EnvelopeBottomFlap from '@/components/EnvelopeBottomFlap';
 import type { UploadedInsertData, MailerComponentType } from '@/components/PdfDropzone';
@@ -304,6 +303,7 @@ export default function DirectMailWorkbench() {
   const envelopeWrapperRef = useRef<HTMLDivElement>(null);
   const staircaseContainerRef = useRef<HTMLDivElement>(null);
   const staircaseStageRef = useRef<HTMLDivElement>(null);
+  const staircaseStackRef = useRef<HTMLDivElement>(null);
 
   const activeInsertIndex = inserts.findIndex((i) => i.id === selectedInsertId);
   const activeInsert = inserts[activeInsertIndex];
@@ -472,10 +472,11 @@ export default function DirectMailWorkbench() {
       });
       const img2dData = canvas2d.toDataURL('image/png');
 
-      // 2. Capture 3D Stage area (excluding sidebar)
+      // 2. Capture 3D Stage Area & Crop strictly to the card stack with padding
       let img3dData: string | null = null;
       const container3d = staircaseContainerRef.current;
       const stage3d = staircaseStageRef.current || container3d;
+      const stack3d = staircaseStackRef.current;
 
       if (container3d && stage3d) {
         const originalDisplay = container3d.style.display;
@@ -493,13 +494,55 @@ export default function DirectMailWorkbench() {
         await new Promise((resolve) => setTimeout(resolve, 250));
 
         try {
-          const canvas3d = await html2canvas(stage3d, {
-            scale: 2,
+          const scaleFactor = 2;
+          const fullCanvas3d = await html2canvas(stage3d, {
+            scale: scaleFactor,
             useCORS: true,
             allowTaint: true,
             backgroundColor: '#e8e6e7',
           });
-          img3dData = canvas3d.toDataURL('image/png');
+
+          if (stack3d) {
+            const stageRect = stage3d.getBoundingClientRect();
+            const stackRect = stack3d.getBoundingClientRect();
+
+            const paddingPx = 30; // Buffer padding in pixels around the card stack
+
+            // Calculate crop bounds relative to the 3D stage area
+            const rawCropX = stackRect.left - stageRect.left - paddingPx;
+            const rawCropY = stackRect.top - stageRect.top - paddingPx;
+            const rawCropW = stackRect.width + paddingPx * 2;
+            const rawCropH = stackRect.height + paddingPx * 2;
+
+            const cropX = Math.max(0, rawCropX);
+            const cropY = Math.max(0, rawCropY);
+            const cropW = Math.min(stageRect.width - cropX, rawCropW);
+            const cropH = Math.min(stageRect.height - cropY, rawCropH);
+
+            const croppedCanvas = document.createElement('canvas');
+            croppedCanvas.width = cropW * scaleFactor;
+            croppedCanvas.height = cropH * scaleFactor;
+            const ctx = croppedCanvas.getContext('2d');
+
+            if (ctx) {
+              ctx.drawImage(
+                fullCanvas3d,
+                cropX * scaleFactor,
+                cropY * scaleFactor,
+                cropW * scaleFactor,
+                cropH * scaleFactor,
+                0,
+                0,
+                cropW * scaleFactor,
+                cropH * scaleFactor
+              );
+              img3dData = croppedCanvas.toDataURL('image/png');
+            } else {
+              img3dData = fullCanvas3d.toDataURL('image/png');
+            }
+          } else {
+            img3dData = fullCanvas3d.toDataURL('image/png');
+          }
         } catch (captureErr) {
           console.warn('3D stage capture failed:', captureErr);
         } finally {
@@ -525,14 +568,14 @@ export default function DirectMailWorkbench() {
       const page = pdfDoc.getPages()[0];
       const { height: pageHeight } = page.getSize();
 
-      // 4. Helper to draw image inside box bounds with adjustable padding
+      // 4. Helper to draw image inside box bounds (paddingFactor = 1.0 fills 100% of Magenta box)
       const drawImageInBox = async (
         dataUrl: string,
         boxXPt: number,
         boxTopYPt: number,
         boxWPt: number,
         boxHPt: number,
-        paddingFactor = 0.98
+        paddingFactor = 1.0
       ) => {
         const image = await pdfDoc.embedPng(dataUrl);
         const imgW = image.width;
@@ -557,17 +600,17 @@ export default function DirectMailWorkbench() {
         });
       };
 
-      // 5. Draw 2D View inside Magenta Container (#ec008c) - 0.98 factor for larger scaling
+      // 5. Draw 2D View inside Magenta Container (#ec008c) - 1.0 scale factor
       await drawImageInBox(
         img2dData,
         0.3575 * 72,
         2.5342 * 72,
         7.7968 * 72,
         3.9473 * 72,
-        0.98
+        1.0
       );
 
-      // 6. Draw 3D Stage inside Cyan Container (#00aeef)
+      // 6. Draw Cropped 3D Stage inside Cyan Container (#00aeef)
       if (img3dData) {
         await drawImageInBox(
           img3dData,
@@ -575,7 +618,7 @@ export default function DirectMailWorkbench() {
           6.7315 * 72,
           7.7968 * 72,
           3.9473 * 72,
-          0.96
+          0.98
         );
       }
 
@@ -1086,7 +1129,7 @@ export default function DirectMailWorkbench() {
         {/* MAIN VIEWPORT */}
         <main style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', position: 'relative' }}>
           
-          {/* 2D CANVAS CONTAINER */}
+          {/* 2D CANVAS CONTAINER (Reduced to 4px padding so exported components render max size) */}
           <div 
             ref={envelopeWrapperRef}
             style={{ 
@@ -1095,7 +1138,7 @@ export default function DirectMailWorkbench() {
               height: '100%', 
               alignItems: 'center', 
               justifyContent: 'center',
-              padding: '12px',
+              padding: '4px',
               overflow: 'visible' 
             }}
           >
@@ -1155,6 +1198,7 @@ export default function DirectMailWorkbench() {
             <StaircaseView
               documents={staircaseDocs}
               stageRef={staircaseStageRef}
+              stackRef={staircaseStackRef}
               onRemoveDocument={(id) => {
                 setInserts((prev) => prev.filter((item) => item.id !== id));
                 if (selectedInsertId === id) setSelectedInsertId(null);
