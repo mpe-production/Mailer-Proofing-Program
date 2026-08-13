@@ -301,6 +301,7 @@ export default function DirectMailWorkbench() {
   const [staggerStepY, setStaggerStepY] = useState<number>(0.25);
 
   const envelopeRef = useRef<HTMLDivElement>(null);
+  const envelopeWrapperRef = useRef<HTMLDivElement>(null);
   const staircaseContainerRef = useRef<HTMLDivElement>(null);
 
   const activeInsertIndex = inserts.findIndex((i) => i.id === selectedInsertId);
@@ -451,34 +452,36 @@ export default function DirectMailWorkbench() {
 
 // OVERLAY PDF TEMPLATE GENERATOR
   const handleExportPdf = async () => {
-    if (!envelopeRef.current) return;
+    // Target the outer wrapper if available to capture overflow/staggered elements
+    const capture2dElement = envelopeWrapperRef.current || envelopeRef.current;
+    if (!capture2dElement) return;
     setIsExporting(true);
 
     const currentSelection = selectedInsertId;
     setSelectedInsertId(null);
 
-    // Wait for selection outlines to disappear
+    // Short delay to clear selection dashed borders
     await new Promise((resolve) => setTimeout(resolve, 150));
 
     try {
-      // 1. Capture 2D Viewport Canvas
-      const canvas2d = await html2canvas(envelopeRef.current, {
+      // 1. Capture 2D Viewport Canvas (including staggered overflow)
+      const canvas2d = await html2canvas(capture2dElement, {
         scale: 3,
         useCORS: true,
-        backgroundColor: '#ffffff',
+        allowTaint: true,
+        backgroundColor: null, // Transparent background so padding looks natural
       });
       const img2dData = canvas2d.toDataURL('image/png');
 
-      // 2. Capture 3D Viewport Canvas safely
+      // 2. Capture 3D Viewport Canvas
       let img3dData: string | null = null;
-      
-      // Temporarily reveal 3D container off-screen if user is in 2D mode
       const container3d = staircaseContainerRef.current;
+
       if (container3d) {
         const originalDisplay = container3d.style.display;
         const originalPosition = container3d.style.position;
-        const originalVisibility = container3d.style.visibility;
 
+        // Temporarily reveal 3D container off-screen if currently in 2D view mode
         if (viewMode === '2d') {
           container3d.style.display = 'flex';
           container3d.style.position = 'fixed';
@@ -488,23 +491,24 @@ export default function DirectMailWorkbench() {
           container3d.style.height = '800px';
         }
 
-        // Allow layout calculation
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        // Wait for GSAP/DOM layout to calculate
+        await new Promise((resolve) => setTimeout(resolve, 250));
 
         try {
-          img3dData = await htmlToImage.toPng(container3d, {
-            quality: 0.95,
-            pixelRatio: 2,
+          const canvas3d = await html2canvas(container3d, {
+            scale: 2,
+            useCORS: true,
+            allowTaint: true,
             backgroundColor: '#e8e6e7',
           });
+          img3dData = canvas3d.toDataURL('image/png');
         } catch (captureErr) {
-          console.warn('3D snapshot capture skipped or failed:', captureErr);
+          console.warn('3D snapshot capture failed:', captureErr);
         } finally {
-          // Restore container layout
+          // Restore container state
           if (viewMode === '2d') {
             container3d.style.display = originalDisplay;
             container3d.style.position = originalPosition;
-            container3d.style.visibility = originalVisibility;
             container3d.style.top = '';
             container3d.style.left = '';
             container3d.style.width = '100%';
@@ -513,33 +517,39 @@ export default function DirectMailWorkbench() {
         }
       }
 
-      // 3. Fetch PDF Template
+      // 3. Load PDF Template
       const templateRes = await fetch('/templates/mailer-sequence-proof-template.pdf');
       if (!templateRes.ok) {
-        throw new Error(`Template PDF not found at /templates/mailer-sequence-proof-template.pdf (Status ${templateRes.status})`);
+        throw new Error(`Template PDF not found (Status ${templateRes.status})`);
       }
       const templateArrayBuffer = await templateRes.arrayBuffer();
-      
+
       const pdfDoc = await PDFDocument.load(templateArrayBuffer);
       const page = pdfDoc.getPages()[0];
-      const { height: pageHeight } = page.getSize();
+      const { height: pageHeight } = page.getSize(); // 792 pt
 
-      // 4. Helper to draw image aspect-ratio contained inside box bounds
+      // 4. Helper to draw image inside box bounds WITH PADDING BUFFER
       const drawImageInBox = async (
         dataUrl: string,
         boxXPt: number,
         boxTopYPt: number,
         boxWPt: number,
-        boxHPt: number
+        boxHPt: number,
+        paddingFactor = 0.88 // 88% scale = 6% padding on each side
       ) => {
         const image = await pdfDoc.embedPng(dataUrl);
         const imgW = image.width;
         const imgH = image.height;
 
-        const scale = Math.min(boxWPt / imgW, boxHPt / imgH);
+        // Calculate padded container bounds
+        const paddedBoxW = boxWPt * paddingFactor;
+        const paddedBoxH = boxHPt * paddingFactor;
+
+        const scale = Math.min(paddedBoxW / imgW, paddedBoxH / imgH);
         const drawW = imgW * scale;
         const drawH = imgH * scale;
 
+        // Center within box
         const offsetX = boxXPt + (boxWPt - drawW) / 2;
         const pdfYBottom = pageHeight - boxTopYPt - boxHPt;
         const offsetY = pdfYBottom + (boxHPt - drawH) / 2;
@@ -555,20 +565,22 @@ export default function DirectMailWorkbench() {
       // 5. Draw 2D View inside Magenta Container (#ec008c)
       await drawImageInBox(
         img2dData,
-        0.3575 * 72,
-        2.5342 * 72,
-        7.7968 * 72,
-        3.9473 * 72
+        0.3575 * 72, // X: 25.74 pt
+        2.5342 * 72, // Y: 182.46 pt
+        7.7968 * 72, // W: 561.37 pt
+        3.9473 * 72, // H: 284.21 pt
+        0.88         // Padding factor
       );
 
       // 6. Draw 3D View inside Cyan Container (#00aeef)
       if (img3dData) {
         await drawImageInBox(
           img3dData,
-          0.3575 * 72,
-          6.7315 * 72,
-          7.7968 * 72,
-          3.9473 * 72
+          0.3575 * 72, // X: 25.74 pt
+          6.7315 * 72, // Y: 484.67 pt
+          7.7968 * 72, // W: 561.37 pt
+          3.9473 * 72, // H: 284.21 pt
+          0.90         // Padding factor
         );
       }
 
@@ -1080,19 +1092,30 @@ export default function DirectMailWorkbench() {
         <main style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', position: 'relative' }}>
           
           {/* 2D CANVAS CONTAINER */}
-          <div style={{ display: viewMode === '2d' ? 'flex' : 'none', width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center' }}>
+          <div 
+            ref={envelopeWrapperRef}
+            style={{ 
+            display: viewMode === '2d' ? 'flex' : 'none', 
+            width: '100%', 
+            height: '100%', 
+            alignItems: 'center', 
+            justifyContent: 'center',
+            padding: '40px', // Ensures staggered inserts outside envelope boundaries are captured
+            overflow: 'visible' 
+        }}
+        >
             <div
-              ref={envelopeRef}
-              style={{
-                width: `${envelopeWidth * ppi}px`,
-                height: `${envelopeHeight * ppi}px`,
-                backgroundColor: '#ffffff',
-                border: '2px solid #334155',
-                boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)',
-                position: 'relative',
-                overflow: 'hidden',
-              }}
-            >
+            ref={envelopeRef}
+            style={{
+            width: `${envelopeWidth * ppi}px`,
+            height: `${envelopeHeight * ppi}px`,
+            backgroundColor: '#ffffff',
+            border: '2px solid #334155',
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)',
+            position: 'relative',
+            overflow: 'visible', // Allows staggered inserts to display outside bounds
+        }}
+        >
               {showWindow && (
                 <div
                   style={{
