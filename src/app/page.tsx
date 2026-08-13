@@ -451,7 +451,7 @@ export default function DirectMailWorkbench() {
     });
   };
 
-  // OVERLAY PDF TEMPLATE GENERATOR
+  /// OVERLAY PDF TEMPLATE GENERATOR
   const handleExportPdf = async () => {
     const capture2dElement = envelopeWrapperRef.current || envelopeRef.current;
     if (!capture2dElement) return;
@@ -472,7 +472,7 @@ export default function DirectMailWorkbench() {
       });
       const img2dData = canvas2d.toDataURL('image/png');
 
-      // 2. Capture 3D Stage Area & Crop to Landscape Banner Format
+      // 2. Capture 3D Stage Area & Crop Tightly Around Card Stack
       let img3dData: string | null = null;
       const container3d = staircaseContainerRef.current;
       const stage3d = staircaseStageRef.current || container3d;
@@ -494,7 +494,7 @@ export default function DirectMailWorkbench() {
         await new Promise((resolve) => setTimeout(resolve, 250));
 
         try {
-          const scaleFactor = 3; // High resolution to eliminate pixelation
+          const scaleFactor = 3; // High resolution rendering
           const fullCanvas3d = await html2canvas(stage3d, {
             scale: scaleFactor,
             useCORS: true,
@@ -506,16 +506,17 @@ export default function DirectMailWorkbench() {
             const stageRect = stage3d.getBoundingClientRect();
             const stackRect = stack3d.getBoundingClientRect();
 
-            const paddingPx = 40; // Buffer padding around the stack
+            const paddingPx = 30; // 30px buffer around 3D elements
 
-            // Span full stage width horizontally, crop tightly to stack height vertically
-            const cropX = 0;
-            const cropW = stageRect.width;
-
+            // Crop tightly around the 3D card stack bounds
+            const rawCropX = stackRect.left - stageRect.left - paddingPx;
             const rawCropY = stackRect.top - stageRect.top - paddingPx;
+            const rawCropW = stackRect.width + paddingPx * 2;
             const rawCropH = stackRect.height + paddingPx * 2;
 
+            const cropX = Math.max(0, rawCropX);
             const cropY = Math.max(0, rawCropY);
+            const cropW = Math.min(stageRect.width - cropX, rawCropW);
             const cropH = Math.min(stageRect.height - cropY, rawCropH);
 
             const croppedCanvas = document.createElement('canvas');
@@ -567,8 +568,8 @@ export default function DirectMailWorkbench() {
       const page = pdfDoc.getPages()[0];
       const { height: pageHeight } = page.getSize();
 
-      // 4. Helper to draw image filling the target container box completely
-      const drawImageInBox = async (
+      // 4. Helper to draw image PROPORTIONALLY centered inside container box
+      const drawImageInBoxProportional = async (
         dataUrl: string,
         boxXPt: number,
         boxTopYPt: number,
@@ -576,18 +577,29 @@ export default function DirectMailWorkbench() {
         boxHPt: number
       ) => {
         const image = await pdfDoc.embedPng(dataUrl);
+        const imgW = image.width;
+        const imgH = image.height;
+
+        // Proportional scale factor (contain fit)
+        const scale = Math.min(boxWPt / imgW, boxHPt / imgH);
+        const drawW = imgW * scale;
+        const drawH = imgH * scale;
+
+        // Center horizontally & vertically inside the container box
+        const offsetX = boxXPt + (boxWPt - drawW) / 2;
         const pdfYBottom = pageHeight - boxTopYPt - boxHPt;
+        const offsetY = pdfYBottom + (boxHPt - drawH) / 2;
 
         page.drawImage(image, {
-          x: boxXPt,
-          y: pdfYBottom,
-          width: boxWPt,
-          height: boxHPt,
+          x: offsetX,
+          y: offsetY,
+          width: drawW,
+          height: drawH,
         });
       };
 
-      // 5. Draw 2D View inside Magenta Container (#ec008c) - Fills exact container dimensions
-      await drawImageInBox(
+      // 5. Draw 2D View inside Magenta Container (#ec008c) - Proportional Contain Fit
+      await drawImageInBoxProportional(
         img2dData,
         0.3575 * 72,
         2.5342 * 72,
@@ -595,9 +607,9 @@ export default function DirectMailWorkbench() {
         3.9473 * 72
       );
 
-      // 6. Draw 3D View inside Cyan Container (#00aeef) - Fills exact container dimensions
+      // 6. Draw 3D View inside Cyan Container (#00aeef) - Proportional Contain Fit
       if (img3dData) {
-        await drawImageInBox(
+        await drawImageInBoxProportional(
           img3dData,
           0.3575 * 72,
           6.7315 * 72,
