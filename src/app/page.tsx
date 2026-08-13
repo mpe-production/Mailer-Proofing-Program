@@ -239,32 +239,38 @@ function DynamicInsertView({
         boxShadow: '0 2px 4px rgba(0,0,0,0.08)',
       }}
     >
-{/* 2D UNIFIED BLUE BADGE (FIXED VERTICAL CENTERING FOR CANVAS) */}
+{/* 2D UNIFIED BLUE BADGE (TABLE-CELL ALIGNMENT FOR HTML2CANVAS) */}
       <div
         style={{
           position: 'absolute',
           top: '4px',
           left: '4px',
-          backgroundColor: '#0066ff',
-          color: '#ffffff',
-          fontSize: '10px',
-          fontWeight: 700,
-          letterSpacing: '0.03em',
           height: '18px',
-          lineHeight: '18px',
-          padding: '0 6px',
+          backgroundColor: '#0066ff',
           borderRadius: '3px',
           zIndex: 10,
           pointerEvents: 'none',
           boxShadow: '0 1px 2px rgba(0,0,0,0.2)',
-          textTransform: 'uppercase',
-          display: 'block',
-          textAlign: 'center',
+          display: 'table',
+          padding: '0 6px',
           boxSizing: 'border-box',
-          whiteSpace: 'nowrap',
         }}
       >
-        {getLabelText()}
+        <span
+          style={{
+            display: 'table-cell',
+            verticalAlign: 'middle',
+            color: '#ffffff',
+            fontSize: '10px',
+            fontWeight: 700,
+            letterSpacing: '0.03em',
+            textTransform: 'uppercase',
+            whiteSpace: 'nowrap',
+            lineHeight: 1,
+          }}
+        >
+          {getLabelText()}
+        </span>
       </div>
 
       <CanvasTrimRenderer

@@ -432,26 +432,32 @@ export function StaircaseView({ documents, onRemoveDocument, stageRef, stackRef 
                 }}
               >
 
-{/* Surface Badge (FIXED VERTICAL CENTERING FOR CANVAS) */}
+{/* Surface Badge (TABLE-CELL ALIGNMENT FOR HTML2CANVAS) */}
                 <div style={{ position: 'absolute', top: '8px', left: '8px', zIndex: 10, pointerEvents: 'none' }}>
-                  <span
+                  <div
                     style={{
-                      backgroundColor: '#0066ff',
-                      color: '#ffffff',
-                      fontSize: '11px',
-                      fontWeight: 800,
+                      display: 'table',
                       height: '20px',
-                      lineHeight: '20px',
-                      padding: '0 8px',
+                      backgroundColor: '#0066ff',
                       borderRadius: '4px',
-                      display: 'block',
-                      textAlign: 'center',
+                      padding: '0 8px',
                       boxSizing: 'border-box',
-                      whiteSpace: 'nowrap',
                     }}
                   >
-                    #{idx + 1}
-                  </span>
+                    <span
+                      style={{
+                        display: 'table-cell',
+                        verticalAlign: 'middle',
+                        color: '#ffffff',
+                        fontSize: '11px',
+                        fontWeight: 800,
+                        whiteSpace: 'nowrap',
+                        lineHeight: 1,
+                      }}
+                    >
+                      #{idx + 1}
+                    </span>
+                  </div>
                 </div>
 
                 {/* 3D Wrapper Hierarchy */}
