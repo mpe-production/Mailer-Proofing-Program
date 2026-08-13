@@ -17,6 +17,9 @@ export interface LoadedPdfDocument {
   trimMarginX?: number;
   trimMarginY?: number;
   selectedPanel?: string;
+  fullWidth?: number;
+  fullHeight?: number;
+  rotation?: number;
 }
 
 export interface StaircaseViewProps {
@@ -75,8 +78,8 @@ function TrimmedImageTexture({ doc }: { doc: LoadedPdfDocument }) {
     img.src = doc.frontImageUrl;
 
     img.onload = () => {
-      const fullWidthInches = doc.widthPt / 72;
-      const fullHeightInches = doc.heightPt / 72;
+      const fullWidthInches = doc.fullWidth || (doc.widthPt / 72);
+      const fullHeightInches = doc.fullHeight || (doc.heightPt / 72);
       const marginX = doc.trimMarginX || 0;
       const marginY = doc.trimMarginY || 0;
 
@@ -88,7 +91,6 @@ function TrimmedImageTexture({ doc }: { doc: LoadedPdfDocument }) {
       let srcW = (fullWidthInches - 2 * marginX) * scaleX;
       let srcH = (fullHeightInches - 2 * marginY) * scaleY;
 
-      // Handle panel panel cuts (Tri-folds / Bi-folds / Remits)
       if (doc.componentType === 'remit_6_5') {
         const panelHeightInches = 3.3641;
         srcH = panelHeightInches * scaleY;
@@ -117,17 +119,45 @@ function TrimmedImageTexture({ doc }: { doc: LoadedPdfDocument }) {
         }
       }
 
+      const rotation = doc.rotation || 0;
+      const is90or270 = rotation === 90 || rotation === 270;
+
+      const cropW = Math.max(1, Math.round(srcW));
+      const cropH = Math.max(1, Math.round(srcH));
+
       const canvas = document.createElement('canvas');
-      canvas.width = Math.max(1, Math.round(srcW));
-      canvas.height = Math.max(1, Math.round(srcH));
+      canvas.width = is90or270 ? cropH : cropW;
+      canvas.height = is90or270 ? cropW : cropH;
+
       const ctx = canvas.getContext('2d');
 
       if (ctx) {
-        ctx.drawImage(img, srcX, srcY, srcW, srcH, 0, 0, canvas.width, canvas.height);
+        ctx.save();
+        ctx.translate(canvas.width / 2, canvas.height / 2);
+        ctx.rotate((rotation * Math.PI) / 180);
+
+        ctx.drawImage(
+          img,
+          srcX, srcY, srcW, srcH,
+          -cropW / 2, -cropH / 2, cropW, cropH
+        );
+
+        ctx.restore();
         setTrimmedUrl(canvas.toDataURL('image/png'));
       }
     };
-  }, [doc.frontImageUrl, doc.widthPt, doc.heightPt, doc.trimMarginX, doc.trimMarginY, doc.componentType, doc.selectedPanel]);
+  }, [
+    doc.frontImageUrl,
+    doc.widthPt,
+    doc.heightPt,
+    doc.fullWidth,
+    doc.fullHeight,
+    doc.trimMarginX,
+    doc.trimMarginY,
+    doc.componentType,
+    doc.selectedPanel,
+    doc.rotation,
+  ]);
 
   return (
     <img

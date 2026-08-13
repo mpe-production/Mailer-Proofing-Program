@@ -325,18 +325,42 @@ export default function DirectMailWorkbench() {
   const activeInsertIndex = inserts.findIndex((i) => i.id === selectedInsertId);
   const activeInsert = inserts[activeInsertIndex];
 
-// Map 2D inserts to 3D Staircase documents format (with crop and trim metadata)
-  const staircaseDocs: LoadedPdfDocument[] = inserts.map((ins) => ({
-    id: ins.id,
-    name: ins.name,
-    frontImageUrl: ins.previewUrl,
-    widthPt: (ins.fullWidth - 2 * ins.trimMarginX) * 72,
-    heightPt: (ins.fullHeight - 2 * ins.trimMarginY) * 72,
-    componentType: ins.componentType,
-    trimMarginX: ins.trimMarginX,
-    trimMarginY: ins.trimMarginY,
-    selectedPanel: ins.selectedPanel,
-  }));
+// Map 2D inserts to 3D Staircase documents format (with exact display panel dimensions & crop metadata)
+  const staircaseDocs: LoadedPdfDocument[] = inserts.map((ins) => {
+    const cleanWidth = Math.max(0.1, ins.fullWidth - 2 * ins.trimMarginX);
+    const cleanHeight = Math.max(0.1, ins.fullHeight - 2 * ins.trimMarginY);
+
+    let displayW = cleanWidth;
+    let displayH = cleanHeight;
+
+    if (ins.componentType === 'remit_6_5') {
+      displayW = 6.25;
+      displayH = 3.3641;
+    } else if (ins.componentType === 'letter' && ins.selectedPanel !== 'none') {
+      displayH = cleanHeight / 3;
+    } else if (ins.componentType === 'letter_bifold' && ins.selectedPanel !== 'none') {
+      displayH = cleanHeight / 2;
+    }
+
+    const is90or270 = ins.rotation === 90 || ins.rotation === 270;
+    const containerW = is90or270 ? displayH : displayW;
+    const containerH = is90or270 ? displayW : displayH;
+
+    return {
+      id: ins.id,
+      name: ins.name,
+      frontImageUrl: ins.previewUrl,
+      widthPt: containerW * 72,
+      heightPt: containerH * 72,
+      componentType: ins.componentType,
+      trimMarginX: ins.trimMarginX,
+      trimMarginY: ins.trimMarginY,
+      selectedPanel: ins.selectedPanel,
+      fullWidth: ins.fullWidth,
+      fullHeight: ins.fullHeight,
+      rotation: ins.rotation,
+    };
+  });
 
   const handleEnvelopePresetChange = (preset: EnvelopePresetType) => {
     setEnvelopePreset(preset);
