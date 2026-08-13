@@ -14,6 +14,9 @@ export interface LoadedPdfDocument {
   widthPt: number;
   heightPt: number;
   componentType?: string;
+  trimMarginX?: number;
+  trimMarginY?: number;
+  selectedPanel?: string;
 }
 
 export interface StaircaseViewProps {
@@ -58,6 +61,81 @@ function classifyPdfFormat(widthPt: number, heightPt: number) {
     calculatedWidthPx: Math.round(widthInches * PX_PER_INCH),
     calculatedHeightPx: Math.round(heightInches * PX_PER_INCH),
   };
+}
+
+// Helper to render trimmed PDF texture on dynamic canvas
+function TrimmedImageTexture({ doc }: { doc: LoadedPdfDocument }) {
+  const [trimmedUrl, setTrimmedUrl] = useState<string>(doc.frontImageUrl);
+
+  useEffect(() => {
+    if (!doc.frontImageUrl) return;
+
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.src = doc.frontImageUrl;
+
+    img.onload = () => {
+      const fullWidthInches = doc.widthPt / 72;
+      const fullHeightInches = doc.heightPt / 72;
+      const marginX = doc.trimMarginX || 0;
+      const marginY = doc.trimMarginY || 0;
+
+      const scaleX = img.naturalWidth / fullWidthInches;
+      const scaleY = img.naturalHeight / fullHeightInches;
+
+      let srcX = marginX * scaleX;
+      let srcY = marginY * scaleY;
+      let srcW = (fullWidthInches - 2 * marginX) * scaleX;
+      let srcH = (fullHeightInches - 2 * marginY) * scaleY;
+
+      // Handle panel panel cuts (Tri-folds / Bi-folds / Remits)
+      if (doc.componentType === 'remit_6_5') {
+        const panelHeightInches = 3.3641;
+        srcH = panelHeightInches * scaleY;
+        srcY = marginY * scaleY;
+      } else if (doc.componentType === 'letter' && doc.selectedPanel && doc.selectedPanel !== 'none') {
+        const fullCleanHeight = fullHeightInches - 2 * marginY;
+        const panelHeightInches = fullCleanHeight / 3;
+        srcH = panelHeightInches * scaleY;
+
+        if (doc.selectedPanel === 'top') {
+          srcY = marginY * scaleY;
+        } else if (doc.selectedPanel === 'middle') {
+          srcY = (marginY + panelHeightInches) * scaleY;
+        } else if (doc.selectedPanel === 'bottom') {
+          srcY = (marginY + panelHeightInches * 2) * scaleY;
+        }
+      } else if (doc.componentType === 'letter_bifold' && doc.selectedPanel && doc.selectedPanel !== 'none') {
+        const fullCleanHeight = fullHeightInches - 2 * marginY;
+        const panelHeightInches = fullCleanHeight / 2;
+        srcH = panelHeightInches * scaleY;
+
+        if (doc.selectedPanel === 'half_top') {
+          srcY = marginY * scaleY;
+        } else if (doc.selectedPanel === 'half_bottom') {
+          srcY = (marginY + panelHeightInches) * scaleY;
+        }
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(srcW));
+      canvas.height = Math.max(1, Math.round(srcH));
+      const ctx = canvas.getContext('2d');
+
+      if (ctx) {
+        ctx.drawImage(img, srcX, srcY, srcW, srcH, 0, 0, canvas.width, canvas.height);
+        setTrimmedUrl(canvas.toDataURL('image/png'));
+      }
+    };
+  }, [doc.frontImageUrl, doc.widthPt, doc.heightPt, doc.trimMarginX, doc.trimMarginY, doc.componentType, doc.selectedPanel]);
+
+  return (
+    <img
+      src={trimmedUrl}
+      alt={`${doc.name} (Front)`}
+      style={{ width: '100%', height: '100%', objectFit: 'fill', display: 'block' }}
+    />
+  );
 }
 
 export function StaircaseView({ documents, onRemoveDocument, stageRef, stackRef }: StaircaseViewProps) {
@@ -431,8 +509,7 @@ export function StaircaseView({ documents, onRemoveDocument, stageRef, stackRef 
                   cursor: 'pointer',
                 }}
               >
-
-{/* Surface Badge (TOP ALIGNED WITH PADDING FOR CANVAS) */}
+                {/* Surface Badge */}
                 <div style={{ position: 'absolute', top: '8px', left: '8px', zIndex: 10, pointerEvents: 'none' }}>
                   <div
                     style={{
@@ -465,9 +542,9 @@ export function StaircaseView({ documents, onRemoveDocument, stageRef, stackRef 
                 <div className="stacked-card__inner-wrapper" style={{ position: 'relative', width: '100%', height: '100%', transformStyle: 'preserve-3d' }}>
                   <div className="stacked-card__inner" style={{ position: 'relative', width: '100%', height: '100%', transformStyle: 'preserve-3d', transition: 'transform 0.6s cubic-bezier(0.4, 0, 0.2, 1)' }}>
                     
-                    {/* Front Face */}
+                    {/* Front Face with Trim & Crop Logic Applied */}
                     <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', backfaceVisibility: 'hidden', background: '#fff', boxShadow: '0 10px 25px rgba(0,0,0,0.15)', overflow: 'hidden', zIndex: 2 }}>
-                      <img src={doc.frontImageUrl} alt={`${doc.name} (Front)`} style={{ width: '100%', height: '100%', objectFit: 'fill', display: 'block' }} />
+                      <TrimmedImageTexture doc={doc} />
                     </div>
 
                     {/* Back Face */}

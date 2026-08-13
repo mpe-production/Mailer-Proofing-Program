@@ -325,14 +325,17 @@ export default function DirectMailWorkbench() {
   const activeInsertIndex = inserts.findIndex((i) => i.id === selectedInsertId);
   const activeInsert = inserts[activeInsertIndex];
 
-  // Map 2D inserts to 3D Staircase documents format
+// Map 2D inserts to 3D Staircase documents format (with crop and trim metadata)
   const staircaseDocs: LoadedPdfDocument[] = inserts.map((ins) => ({
     id: ins.id,
     name: ins.name,
     frontImageUrl: ins.previewUrl,
-    widthPt: ins.fullWidth * 72,
-    heightPt: ins.fullHeight * 72,
+    widthPt: (ins.fullWidth - 2 * ins.trimMarginX) * 72,
+    heightPt: (ins.fullHeight - 2 * ins.trimMarginY) * 72,
     componentType: ins.componentType,
+    trimMarginX: ins.trimMarginX,
+    trimMarginY: ins.trimMarginY,
+    selectedPanel: ins.selectedPanel,
   }));
 
   const handleEnvelopePresetChange = (preset: EnvelopePresetType) => {
