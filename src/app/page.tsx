@@ -3,8 +3,9 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import dynamic from 'next/dynamic';
-import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
+import * as htmlToImage from 'html-to-image';
+import { PDFDocument } from 'pdf-lib';
 import EnvelopeBottomFlap from '@/components/EnvelopeBottomFlap';
 import type { UploadedInsertData, MailerComponentType } from '@/components/PdfDropzone';
 import type { LoadedPdfDocument } from '@/components/StaircaseView';
@@ -300,6 +301,8 @@ export default function DirectMailWorkbench() {
   const [staggerStepY, setStaggerStepY] = useState<number>(0.25);
 
   const envelopeRef = useRef<HTMLDivElement>(null);
+  const staircaseContainerRef = useRef<HTMLDivElement>(null);
+
   const activeInsertIndex = inserts.findIndex((i) => i.id === selectedInsertId);
   const activeInsert = inserts[activeInsertIndex];
 
@@ -446,6 +449,7 @@ export default function DirectMailWorkbench() {
     });
   };
 
+  // OVERLAY PDF TEMPLATE GENERATOR
   const handleExportPdf = async () => {
     if (!envelopeRef.current) return;
     setIsExporting(true);
@@ -453,30 +457,96 @@ export default function DirectMailWorkbench() {
     const currentSelection = selectedInsertId;
     setSelectedInsertId(null);
 
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await new Promise((resolve) => setTimeout(resolve, 100));
 
     try {
-      const element = envelopeRef.current;
-
-      const canvas = await html2canvas(element, {
+      // 1. Capture 2D Viewport Canvas
+      const canvas2d = await html2canvas(envelopeRef.current, {
         scale: 3,
         useCORS: true,
         backgroundColor: '#ffffff',
       });
+      const img2dData = canvas2d.toDataURL('image/png');
 
-      const imgData = canvas.toDataURL('image/jpeg', 0.95);
+      // 2. Capture 3D Viewport Canvas
+      let img3dData: string | null = null;
+      if (staircaseContainerRef.current) {
+        img3dData = await htmlToImage.toPng(staircaseContainerRef.current, {
+          quality: 1.0,
+          pixelRatio: 2,
+          backgroundColor: '#e8e6e7',
+        });
+      }
 
-      const orientation = envelopeWidth >= envelopeHeight ? 'landscape' : 'portrait';
-      const pdf = new jsPDF({
-        orientation,
-        unit: 'in',
-        format: [envelopeWidth, envelopeHeight],
-      });
+      // 3. Load PDF Template
+      const templateArrayBuffer = await fetch('/templates/mailer-sequence-proof-template.pdf').then((res) =>
+        res.arrayBuffer()
+      );
+      const pdfDoc = await PDFDocument.load(templateArrayBuffer);
+      const page = pdfDoc.getPages()[0];
+      const { height: pageHeight } = page.getSize(); // Standard 11" = 792 pt
 
-      pdf.addImage(imgData, 'JPEG', 0, 0, envelopeWidth, envelopeHeight);
-      pdf.save(`envelope-proof-${envelopeWidth}x${envelopeHeight}.pdf`);
+      // 4. Helper to draw image aspect-ratio contained inside box bounds
+      const drawImageInBox = async (
+        dataUrl: string,
+        boxXPt: number,
+        boxTopYPt: number,
+        boxWPt: number,
+        boxHPt: number
+      ) => {
+        const image = await pdfDoc.embedPng(dataUrl);
+        const imgW = image.width;
+        const imgH = image.height;
+
+        const scale = Math.min(boxWPt / imgW, boxHPt / imgH);
+        const drawW = imgW * scale;
+        const drawH = imgH * scale;
+
+        const offsetX = boxXPt + (boxWPt - drawW) / 2;
+        // pdf-lib measures Y from bottom-left corner
+        const pdfYBottom = pageHeight - boxTopYPt - boxHPt;
+        const offsetY = pdfYBottom + (boxHPt - drawH) / 2;
+
+        page.drawImage(image, {
+          x: offsetX,
+          y: offsetY,
+          width: drawW,
+          height: drawH,
+        });
+      };
+
+      // 5. Draw 2D View inside Magenta Container (0.3575", 2.5342", 7.7968", 3.9473")
+      await drawImageInBox(
+        img2dData,
+        0.3575 * 72, // 25.74 pt
+        2.5342 * 72, // 182.46 pt
+        7.7968 * 72, // 561.37 pt
+        3.9473 * 72  // 284.21 pt
+      );
+
+      // 6. Draw 3D View inside Cyan Container (0.3575", 6.7315", 7.7968", 3.9473")
+      if (img3dData) {
+        await drawImageInBox(
+          img3dData,
+          0.3575 * 72, // 25.74 pt
+          6.7315 * 72, // 484.67 pt
+          7.7968 * 72, // 561.37 pt
+          3.9473 * 72  // 284.21 pt
+        );
+      }
+
+      // 7. Generate PDF Download
+      const pdfBytes = await pdfDoc.save();
+      const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+      const downloadUrl = URL.createObjectURL(blob);
+
+      const a = document.createElement('a');
+      a.href = downloadUrl;
+      a.download = `mailer-sequence-proof-${Date.now()}.pdf`;
+      a.click();
+      URL.revokeObjectURL(downloadUrl);
     } catch (err) {
-      console.error('Failed to generate PDF download:', err);
+      console.error('Failed to generate template PDF:', err);
     } finally {
       setSelectedInsertId(currentSelection);
       setIsExporting(false);
@@ -510,7 +580,7 @@ export default function DirectMailWorkbench() {
               transition: 'all 0.2s',
             }}
           >
-            2D View
+            🖼️ 2D Envelope Proof
           </button>
           <button
             onClick={() => setViewMode('3d')}
@@ -526,29 +596,27 @@ export default function DirectMailWorkbench() {
               transition: 'all 0.2s',
             }}
           >
-            3D View
+            📦 3D Staircase View
           </button>
         </div>
 
         <div>
-          {viewMode === '2d' && (
-            <button
-              onClick={handleExportPdf}
-              disabled={isExporting}
-              style={{
-                backgroundColor: isExporting ? '#94a3b8' : '#16a34a',
-                color: '#ffffff',
-                border: 'none',
-                borderRadius: '6px',
-                padding: '8px 14px',
-                fontSize: '0.78rem',
-                fontWeight: 700,
-                cursor: isExporting ? 'not-allowed' : 'pointer',
-              }}
-            >
-              {isExporting ? 'Generating...' : '📄 Export PDF'}
-            </button>
-          )}
+          <button
+            onClick={handleExportPdf}
+            disabled={isExporting}
+            style={{
+              backgroundColor: isExporting ? '#94a3b8' : '#16a34a',
+              color: '#ffffff',
+              border: 'none',
+              borderRadius: '6px',
+              padding: '8px 14px',
+              fontSize: '0.78rem',
+              fontWeight: 700,
+              cursor: isExporting ? 'not-allowed' : 'pointer',
+            }}
+          >
+            {isExporting ? 'Generating Proof...' : '📄 Export Proof PDF'}
+          </button>
         </div>
       </header>
 
@@ -968,9 +1036,11 @@ export default function DirectMailWorkbench() {
           </aside>
         )}
 
-        {/* MAIN VIEWPORT: SWITCHES BETWEEN 2D ENVELOPE PROOF AND 3D STAIRCASE */}
+        {/* MAIN VIEWPORT */}
         <main style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', position: 'relative' }}>
-          {viewMode === '2d' ? (
+          
+          {/* 2D CANVAS CONTAINER */}
+          <div style={{ display: viewMode === '2d' ? 'flex' : 'none', width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center' }}>
             <div
               ref={envelopeRef}
               style={{
@@ -1020,7 +1090,10 @@ export default function DirectMailWorkbench() {
                 />
               )}
             </div>
-          ) : (
+          </div>
+
+          {/* 3D STAIRCASE CONTAINER */}
+          <div ref={staircaseContainerRef} style={{ display: viewMode === '3d' ? 'flex' : 'none', width: '100%', height: '100%' }}>
             <StaircaseView
               documents={staircaseDocs}
               onRemoveDocument={(id) => {
@@ -1028,7 +1101,8 @@ export default function DirectMailWorkbench() {
                 if (selectedInsertId === id) setSelectedInsertId(null);
               }}
             />
-          )}
+          </div>
+
         </main>
       </div>
     </div>
