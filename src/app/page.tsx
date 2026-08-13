@@ -468,7 +468,7 @@ export default function DirectMailWorkbench() {
     });
   };
 
-/// OVERLAY PDF TEMPLATE GENERATOR
+/// // OVERLAY PDF TEMPLATE GENERATOR
   const handleExportPdf = async () => {
     const capture2dElement = envelopeWrapperRef.current || envelopeRef.current;
     if (!capture2dElement) return;
@@ -687,7 +687,7 @@ export default function DirectMailWorkbench() {
       }
 
       // -------------------------------------------------------------
-      // 3. LOAD PDF TEMPLATE & EMBED IMAGES & CUSTOM USER INPUT TEXT
+      // 3. LOAD PDF TEMPLATE & EMBED USER INPUT TEXT
       // -------------------------------------------------------------
       const templateRes = await fetch('/templates/mailer-sequence-proof-template.pdf');
       if (!templateRes.ok) {
@@ -697,46 +697,55 @@ export default function DirectMailWorkbench() {
 
       const pdfDoc = await PDFDocument.load(templateArrayBuffer);
       const page = pdfDoc.getPages()[0];
-      const { height: pageHeight } = page.getSize();
+      const { height: pageHeight } = page.getSize(); // Standard 11" = 792 pt
 
       const helveticaBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
-      // Draw user input values over template placeholder areas
-      // White rectangle overlays to obscure default template text if needed
+      // --- USER METADATA OVERLAYS ---
+
+      // 1. Recipient Name: X = 3.4955" (251.68 pt), Y = 0.8306" (732.20 pt from bottom)
+      const recipientXPt = 3.4955 * 72; // 251.68 pt
+      const recipientYPt = pageHeight - 0.8306 * 72; // 732.20 pt
+
+      // White overlay box to cover template placeholder text
       page.drawRectangle({
-        x: 485,
-        y: pageHeight - 78,
-        width: 110,
-        height: 14,
+        x: recipientXPt,
+        y: recipientYPt - 2,
+        width: 180,
+        height: 12,
         color: rgb(1, 1, 1),
       });
 
-      page.drawRectangle({
-        x: 485,
-        y: pageHeight - 96,
-        width: 110,
-        height: 14,
-        color: rgb(1, 1, 1),
-      });
-
-      // Draw custom Attn: Name
       page.drawText(attnName, {
-        x: 485,
-        y: pageHeight - 74,
-        size: 10,
+        x: recipientXPt,
+        y: recipientYPt,
+        size: 9,
         font: helveticaBold,
         color: rgb(0, 0, 0),
       });
 
-      // Draw custom Job #
+      // 2. Job #: X = 4.0329" (290.37 pt), Y = 1.1367" (710.16 pt from bottom)
+      const jobNumXPt = 4.0329 * 72; // 290.37 pt
+      const jobNumYPt = pageHeight - 1.1367 * 72; // 710.16 pt
+
+      // White overlay box to cover template placeholder text
+      page.drawRectangle({
+        x: jobNumXPt,
+        y: jobNumYPt - 2,
+        width: 140,
+        height: 12,
+        color: rgb(1, 1, 1),
+      });
+
       page.drawText(jobNumber, {
-        x: 485,
-        y: pageHeight - 92,
-        size: 10,
+        x: jobNumXPt,
+        y: jobNumYPt,
+        size: 9,
         font: helveticaBold,
         color: rgb(0, 0, 0),
       });
 
+      // --- IMAGE CONTAINER DRAWING HELPER ---
       const drawImageInBoxProportional = async (
         dataUrl: string,
         boxXPt: number,
