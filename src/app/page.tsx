@@ -510,7 +510,7 @@ export default function DirectMailWorkbench() {
               transition: 'all 0.2s',
             }}
           >
-            🖼️ 2D Envelope Proof
+            2D View
           </button>
           <button
             onClick={() => setViewMode('3d')}
@@ -526,7 +526,7 @@ export default function DirectMailWorkbench() {
               transition: 'all 0.2s',
             }}
           >
-            📦 3D Staircase View
+            3D View
           </button>
         </div>
 
