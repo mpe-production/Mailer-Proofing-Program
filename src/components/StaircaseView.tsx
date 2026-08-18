@@ -79,8 +79,8 @@ function TrimmedImageTexture({ doc }: { doc: LoadedPdfDocument }) {
     img.src = doc.frontImageUrl;
 
     img.onload = () => {
-      const fullW = doc.fullWidth || (doc.widthPt / 72);
-      const fullH = doc.fullHeight || (doc.heightPt / 72);
+      const fullW = doc.fullWidth || doc.widthPt / 72;
+      const fullH = doc.fullHeight || doc.heightPt / 72;
       const mX = doc.trimMarginX || 0;
       const mY = doc.trimMarginY || 0;
 
@@ -138,8 +138,14 @@ function TrimmedImageTexture({ doc }: { doc: LoadedPdfDocument }) {
 
         ctx.drawImage(
           img,
-          srcX, srcY, srcW, srcH,
-          -renderW / 2, -renderH / 2, renderW, renderH
+          srcX,
+          srcY,
+          srcW,
+          srcH,
+          -renderW / 2,
+          -renderH / 2,
+          renderW,
+          renderH
         );
 
         ctx.restore();
@@ -205,7 +211,7 @@ export function StaircaseView({ documents, onRemoveDocument, stageRef, stackRef 
       const wrapper = cardEl.querySelector('.stacked-card__inner-wrapper');
 
       const posY = paddingTop + i * stepY;
-      const topStackZIndex = total - i;
+      const topStackZIndex = i + 1; // Reversed Z-index hierarchy
       const isFlipped = !!flippedCards[doc.id];
       const targetZIndex = isFlipped ? 1000 : topStackZIndex;
 
@@ -511,7 +517,8 @@ export function StaircaseView({ documents, onRemoveDocument, stageRef, stackRef 
         )}
 
         <div ref={activeStackRef} style={{ position: 'absolute', top: 0, left: 0, transformOrigin: 'top left' }}>
-          {documents.map((doc, idx) => {
+          {[...documents].reverse().map((doc, reverseIdx) => {
+            const idx = documents.length - 1 - reverseIdx;
             const formatInfo = classifyPdfFormat(doc.widthPt, doc.heightPt);
 
             return (
