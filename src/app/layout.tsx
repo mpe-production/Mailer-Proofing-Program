@@ -14,9 +14,25 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Mailer Proofing System",
-  description: "MP Express program to proof Mailer Stuffing Sequences",
+  description: "Direct Mail Sequence Proofing | MP Express",
   icons: {
     icon: '/favicon.png',
+  },
+  openGraph: {
+    title: 'Mailer Proofing System',
+    description: 'Direct Mail Sequence Proofing | MP Express',
+    url: 'https://mailer.mpexpress.com',
+    siteName: 'MP Express Mailer Proofing System',
+    images: [
+      {
+        url: '/mailer-system-opengraph-img.jpg',
+        width: 1200,
+        height: 630,
+        alt: 'MP Express Mailer Proofing System Preview',
+      },
+    ],
+    locale: 'en_US',
+    type: 'website',
   },
 };
 
