@@ -199,7 +199,15 @@ export function StaircaseView({ documents, onRemoveDocument, stageRef, stackRef 
     const paddingLeft = 40;
     const paddingTop = 50;
 
-    let currentX = paddingLeft;
+    // Calculate total layout width across all documents in sequence
+    let totalSpanX = 0;
+    documents.forEach((doc) => {
+      const formatInfo = classifyPdfFormat(doc.widthPt, doc.heightPt);
+      totalSpanX += formatInfo.calculatedWidthPx * cos38 + cardGap;
+    });
+
+    // Inverse positioning layout
+    let accumX = paddingLeft;
 
     documents.forEach((doc, i) => {
       const cardEl = cardRefs.current.get(doc.id);
@@ -210,17 +218,21 @@ export function StaircaseView({ documents, onRemoveDocument, stageRef, stackRef 
       const projectedWidth = rawWidth * cos38;
       const wrapper = cardEl.querySelector('.stacked-card__inner-wrapper');
 
-      const posY = paddingTop + i * stepY;
-      const topStackZIndex = i + 1; // Reversed Z-index hierarchy
+      // Inverse X layout positioning
+      const revIndex = total - 1 - i;
+      const posX = paddingLeft + (totalSpanX - accumX - projectedWidth);
+      const posY = paddingTop + revIndex * stepY;
+
+      const topStackZIndex = i + 1;
       const isFlipped = !!flippedCards[doc.id];
       const targetZIndex = isFlipped ? 1000 : topStackZIndex;
 
-      cardEl.dataset.posX = String(currentX);
+      cardEl.dataset.posX = String(posX);
       cardEl.dataset.posY = String(posY);
       cardEl.dataset.baseZIndex = String(topStackZIndex);
 
       gsap.to(cardEl, {
-        x: currentX,
+        x: posX,
         y: posY,
         zIndex: targetZIndex,
         duration: 0.4,
@@ -237,7 +249,7 @@ export function StaircaseView({ documents, onRemoveDocument, stageRef, stackRef 
         });
       }
 
-      currentX += projectedWidth + cardGap;
+      accumX += projectedWidth + cardGap;
     });
 
     // Auto-fit scale to keep all cards within stage view
@@ -254,7 +266,7 @@ export function StaircaseView({ documents, onRemoveDocument, stageRef, stackRef 
         if (info.calculatedHeightPx > maxCardHeight) maxCardHeight = info.calculatedHeightPx;
       });
 
-      const totalRenderWidth = currentX + maxCardWidth;
+      const totalRenderWidth = totalSpanX + maxCardWidth;
       const totalRenderHeight = paddingTop + (total - 1) * stepY + maxCardHeight;
 
       const scaleX = availableWidth / totalRenderWidth;
@@ -517,8 +529,7 @@ export function StaircaseView({ documents, onRemoveDocument, stageRef, stackRef 
         )}
 
         <div ref={activeStackRef} style={{ position: 'absolute', top: 0, left: 0, transformOrigin: 'top left' }}>
-          {[...documents].reverse().map((doc, reverseIdx) => {
-            const idx = documents.length - 1 - reverseIdx;
+          {documents.map((doc, idx) => {
             const formatInfo = classifyPdfFormat(doc.widthPt, doc.heightPt);
 
             return (
@@ -547,43 +558,42 @@ export function StaircaseView({ documents, onRemoveDocument, stageRef, stackRef 
                   cursor: 'pointer',
                 }}
               >
-                {/* 3D Wrapper Hierarchy */}
+                {/* FLAT 2D OVERLAY BADGE (UNTOUCHED BY 3D PERSPECTIVE) */}
+                <div style={{ position: 'absolute', top: '-10px', left: '-10px', zIndex: 100, pointerEvents: 'none' }}>
+                  <div
+                    style={{
+                      display: 'table',
+                      height: '22px',
+                      backgroundColor: '#0066ff',
+                      borderRadius: '4px',
+                      padding: '0 8px',
+                      boxSizing: 'border-box',
+                      boxShadow: '0 2px 6px rgba(0,0,0,0.3)',
+                    }}
+                  >
+                    <span
+                      style={{
+                        display: 'table-cell',
+                        verticalAlign: 'top',
+                        paddingTop: '3px',
+                        color: '#ffffff',
+                        fontSize: '11px',
+                        fontWeight: 800,
+                        whiteSpace: 'nowrap',
+                        lineHeight: 1,
+                      }}
+                    >
+                      #{idx + 1}
+                    </span>
+                  </div>
+                </div>
+
+                {/* 3D WRAPPER HIERARCHY */}
                 <div className="stacked-card__inner-wrapper" style={{ position: 'relative', width: '100%', height: '100%', transformStyle: 'preserve-3d' }}>
                   <div className="stacked-card__inner" style={{ position: 'relative', width: '100%', height: '100%', transformStyle: 'preserve-3d', transition: 'transform 0.6s cubic-bezier(0.4, 0, 0.2, 1)' }}>
                     
                     {/* Front Face with Trim & Crop Logic Applied */}
                     <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', backfaceVisibility: 'hidden', background: '#fff', boxShadow: '0 10px 25px rgba(0,0,0,0.15)', overflow: 'hidden', zIndex: 2 }}>
-                      
-                      {/* Surface Badge Overlay */}
-                      <div style={{ position: 'absolute', top: '8px', left: '8px', zIndex: 20, pointerEvents: 'none' }}>
-                        <div
-                          style={{
-                            display: 'table',
-                            height: '22px',
-                            backgroundColor: '#0066ff',
-                            borderRadius: '4px',
-                            padding: '0 8px',
-                            boxSizing: 'border-box',
-                            boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
-                          }}
-                        >
-                          <span
-                            style={{
-                              display: 'table-cell',
-                              verticalAlign: 'top',
-                              paddingTop: '3px',
-                              color: '#ffffff',
-                              fontSize: '11px',
-                              fontWeight: 800,
-                              whiteSpace: 'nowrap',
-                              lineHeight: 1,
-                            }}
-                          >
-                            #{idx + 1}
-                          </span>
-                        </div>
-                      </div>
-
                       <TrimmedImageTexture doc={doc} />
                     </div>
 
