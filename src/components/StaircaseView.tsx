@@ -556,18 +556,22 @@ export function StaircaseView({ documents, onRemoveDocument, stageRef, stackRef 
                   cursor: 'pointer',
                 }}
               >
-                {/* LARGER CENTERED 2D OVERLAY BADGE WITH EXTREME Z-INDEX */}
+                {/* STRICT 2D CENTERED BADGE OVERLAY ABOVE CARD */}
                 <div
                   style={{
                     position: 'absolute',
-                    top: '-36px', // Increased offset to clear the asset top edge                    left: '50%',
-                    transform: 'translateX(-50%)',
-                    zIndex: 10000,
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    display: 'flex',
+                    justifyContent: 'center',
                     pointerEvents: 'none',
+                    zIndex: 10000,
                   }}
                 >
                   <div
                     style={{
+                      transform: 'translateY(-120%)',
                       display: 'table',
                       height: '28px',
                       backgroundColor: '#0066ff',
