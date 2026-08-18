@@ -511,7 +511,7 @@ export default function DirectMailWorkbench() {
       const targetRatio = 7.7968 / 3.9473;
 
       // -------------------------------------------------------------
-      // 1. CAPTURE & CROP 2D VIEWPORT
+      // 1. CAPTURE & CROP 2D VIEWPORT (CONSTRAINED TO ENVELOPE BOUNDS)
       // -------------------------------------------------------------
       const scaleFactor2d = 3;
       const fullCanvas2d = await html2canvas(capture2dElement, {
@@ -527,23 +527,13 @@ export default function DirectMailWorkbench() {
         const wrapperRect = capture2dElement.getBoundingClientRect();
         const envelopeRect = envelopeRef.current.getBoundingClientRect();
 
-        let minX = envelopeRect.left;
-        let minY = envelopeRect.top;
-        let maxX = envelopeRect.right;
-        let maxY = envelopeRect.bottom;
+        // Constrain bounding box strictly to envelope boundaries
+        const minX = envelopeRect.left;
+        const minY = envelopeRect.top;
+        const maxX = envelopeRect.right;
+        const maxY = envelopeRect.bottom;
 
-        const childElements = envelopeRef.current.querySelectorAll('*');
-        childElements.forEach((el) => {
-          const r = el.getBoundingClientRect();
-          if (r.width > 0 && r.height > 0) {
-            if (r.left < minX) minX = r.left;
-            if (r.top < minY) minY = r.top;
-            if (r.right > maxX) maxX = r.right;
-            if (r.bottom > maxY) maxY = r.bottom;
-          }
-        });
-
-        const paddingPx = 20;
+        const paddingPx = 10;
         const contentCenterX = (minX + maxX) / 2 - wrapperRect.left;
         const contentCenterY = (minY + maxY) / 2 - wrapperRect.top;
 
@@ -589,7 +579,7 @@ export default function DirectMailWorkbench() {
       }
 
       // -------------------------------------------------------------
-      // 2. CAPTURE & CROP 3D VIEWPORT
+      // 2. CAPTURE & CROP 3D VIEWPORT (HIGH-RES + UNION CARDS BOUNDING BOX)
       // -------------------------------------------------------------
       let img3dData: string | null = null;
       const container3d = staircaseContainerRef.current;
@@ -724,15 +714,15 @@ export default function DirectMailWorkbench() {
 
       const pdfDoc = await PDFDocument.load(templateArrayBuffer);
       const page = pdfDoc.getPages()[0];
-      const { height: pageHeight } = page.getSize(); // 11" = 792 pt
+      const { height: pageHeight } = page.getSize(); // Standard 11" = 792 pt
 
       const helveticaBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
-      // --- USER METADATA OVERLAYS (14 pt font, no background boxes) ---
+      // --- USER METADATA OVERLAYS (14 pt font, transparent background) ---
 
       // 1. Recipient Name: X = 3.4433" (247.92 pt), Y = 0.9963" (720.27 pt from bottom)
-      const recipientXPt = 3.4433 * 72; // 247.92 pt
-      const recipientYPt = pageHeight - 0.9963 * 72; // 720.27 pt
+      const recipientXPt = 3.4433 * 72;
+      const recipientYPt = pageHeight - 0.9963 * 72;
 
       page.drawText(attnName, {
         x: recipientXPt,
@@ -743,8 +733,8 @@ export default function DirectMailWorkbench() {
       });
 
       // 2. Job #: X = 4.0300" (290.16 pt), Y = 1.3076" (697.85 pt from bottom)
-      const jobNumXPt = 4.03 * 72; // 290.16 pt
-      const jobNumYPt = pageHeight - 1.3076 * 72; // 697.85 pt
+      const jobNumXPt = 4.03 * 72;
+      const jobNumYPt = pageHeight - 1.3076 * 72;
 
       page.drawText(jobNumber, {
         x: jobNumXPt,
@@ -1355,13 +1345,14 @@ export default function DirectMailWorkbench() {
             <div
               ref={envelopeRef}
               style={{
-                width: `${envelopeWidth * ppi}px`,
-                height: `${envelopeHeight * ppi}px`,
-                backgroundColor: '#ffffff',
-                border: '2px solid #334155',
-                boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)',
-                position: 'relative',
-                overflow: 'visible',
+              position: 'relative',
+              width: `${envelopeWidth * ppi}px`,
+              height: `${envelopeHeight * ppi}px`,
+              backgroundColor: '#ffffff',
+              border: '1px solid #cbd5e1',
+              borderRadius: '4px',
+              boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+              overflow: 'hidden', // Clips all nested inserts to envelope boundary
               }}
             >
               {showWindow && (
