@@ -15,6 +15,9 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Mailer Proofing System",
   description: "MP Express program to proof Mailer Stuffing Sequences",
+  icons: {
+    icon: '/favicon.png',
+  },
 };
 
 export default function RootLayout({
