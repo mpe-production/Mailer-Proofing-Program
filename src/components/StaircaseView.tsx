@@ -560,8 +560,7 @@ export function StaircaseView({ documents, onRemoveDocument, stageRef, stackRef 
                 <div
                   style={{
                     position: 'absolute',
-                    top: '-16px',
-                    left: '50%',
+                    top: '-36px', // Increased offset to clear the asset top edge                    left: '50%',
                     transform: 'translateX(-50%)',
                     zIndex: 10000,
                     pointerEvents: 'none',
