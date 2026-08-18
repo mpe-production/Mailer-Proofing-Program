@@ -288,8 +288,8 @@ export default function DirectMailWorkbench() {
   const [viewMode, setViewMode] = useState<'2d' | '3d'>('2d');
 
 // User Input
-  const [attnName, setAttnName] = useState<string>('11111');
-  const [jobNumber, setJobNumber] = useState<string>('22222');
+  const [attnName, setAttnName] = useState<string>('');
+  const [jobNumber, setJobNumber] = useState<string>('');
 
   // Envelope Presets
   const [envelopePreset, setEnvelopePreset] = useState<EnvelopePresetType>('no10_commercial');
@@ -799,9 +799,12 @@ export default function DirectMailWorkbench() {
       const blob = new Blob([pdfBytes.buffer as ArrayBuffer], { type: 'application/pdf' });
       const downloadUrl = URL.createObjectURL(blob);
 
+      // Clean user job number string for safe filename usage
+      const formattedJobNumber = jobNumber.trim() ? jobNumber.trim().replace(/[^a-zA-Z0-9_-]/g, '') : 'proof';
+
       const link = document.createElement('a');
       link.href = downloadUrl;
-      link.download = `mailer-sequence-proof-${Date.now()}.pdf`;
+      link.download = `mailer-sequence-proof-${formattedJobNumber}.pdf`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -827,40 +830,38 @@ export default function DirectMailWorkbench() {
         </div>
 
         {/* 2D / 3D VIEW TOGGLE BUTTONS */}
-        <div style={{ display: 'flex', backgroundColor: '#1e293b', padding: '4px', borderRadius: '8px', border: '1px solid #334155' }}>
-          <button
-            onClick={() => setViewMode('2d')}
-            style={{
-              padding: '6px 16px',
-              fontSize: '0.80rem',
-              fontWeight: 700,
-              borderRadius: '6px',
-              border: 'none',
-              cursor: 'pointer',
-              backgroundColor: viewMode === '2d' ? '#2563eb' : 'transparent',
-              color: viewMode === '2d' ? '#ffffff' : '#94a3b8',
-              transition: 'all 0.2s',
-            }}
-          >
-            🖼️ 2D Envelope Proof
-          </button>
-          <button
-            onClick={() => setViewMode('3d')}
-            style={{
-              padding: '6px 16px',
-              fontSize: '0.80rem',
-              fontWeight: 700,
-              borderRadius: '6px',
-              border: 'none',
-              cursor: 'pointer',
-              backgroundColor: viewMode === '3d' ? '#2563eb' : 'transparent',
-              color: viewMode === '3d' ? '#ffffff' : '#94a3b8',
-              transition: 'all 0.2s',
-            }}
-          >
-            📦 3D Staircase View
-          </button>
-        </div>
+        <div style={{ display: 'flex', gap: '8px' }}>
+  <button
+    onClick={() => setViewMode('2d')}
+    style={{
+      padding: '8px 16px',
+      fontSize: '0.82rem',
+      fontWeight: 700,
+      backgroundColor: viewMode === '2d' ? '#2563eb' : '#f1f5f9',
+      color: viewMode === '2d' ? '#ffffff' : '#475569',
+      border: 'none',
+      borderRadius: '6px',
+      cursor: 'pointer',
+    }}
+  >
+    2D Stacked Order
+  </button>
+  <button
+    onClick={() => setViewMode('3d')}
+    style={{
+      padding: '8px 16px',
+      fontSize: '0.82rem',
+      fontWeight: 700,
+      backgroundColor: viewMode === '3d' ? '#2563eb' : '#f1f5f9',
+      color: viewMode === '3d' ? '#ffffff' : '#475569',
+      border: 'none',
+      borderRadius: '6px',
+      cursor: 'pointer',
+    }}
+  >
+    3D Sequence Order
+  </button>
+</div>
 
         <div>
           <button
