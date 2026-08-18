@@ -206,7 +206,6 @@ export function StaircaseView({ documents, onRemoveDocument, stageRef, stackRef 
       totalSpanX += formatInfo.calculatedWidthPx * cos38 + cardGap;
     });
 
-    // Inverse positioning layout
     let accumX = paddingLeft;
 
     documents.forEach((doc, i) => {
@@ -218,7 +217,6 @@ export function StaircaseView({ documents, onRemoveDocument, stageRef, stackRef 
       const projectedWidth = rawWidth * cos38;
       const wrapper = cardEl.querySelector('.stacked-card__inner-wrapper');
 
-      // Inverse X layout positioning
       const revIndex = total - 1 - i;
       const posX = paddingLeft + (totalSpanX - accumX - projectedWidth);
       const posY = paddingTop + revIndex * stepY;
@@ -558,29 +556,39 @@ export function StaircaseView({ documents, onRemoveDocument, stageRef, stackRef 
                   cursor: 'pointer',
                 }}
               >
-                {/* FLAT 2D OVERLAY BADGE (UNTOUCHED BY 3D PERSPECTIVE) */}
-                <div style={{ position: 'absolute', top: '-10px', left: '-10px', zIndex: 100, pointerEvents: 'none' }}>
+                {/* LARGER CENTERED 2D OVERLAY BADGE WITH EXTREME Z-INDEX */}
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: '-16px',
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    zIndex: 10000,
+                    pointerEvents: 'none',
+                  }}
+                >
                   <div
                     style={{
                       display: 'table',
-                      height: '22px',
+                      height: '28px',
                       backgroundColor: '#0066ff',
-                      borderRadius: '4px',
-                      padding: '0 8px',
+                      borderRadius: '6px',
+                      padding: '0 14px',
                       boxSizing: 'border-box',
-                      boxShadow: '0 2px 6px rgba(0,0,0,0.3)',
+                      boxShadow: '0 3px 8px rgba(0,0,0,0.35)',
                     }}
                   >
                     <span
                       style={{
                         display: 'table-cell',
                         verticalAlign: 'top',
-                        paddingTop: '3px',
+                        paddingTop: '4px',
                         color: '#ffffff',
-                        fontSize: '11px',
+                        fontSize: '13px',
                         fontWeight: 800,
                         whiteSpace: 'nowrap',
                         lineHeight: 1,
+                        letterSpacing: '0.02em',
                       }}
                     >
                       #{idx + 1}
